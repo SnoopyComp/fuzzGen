@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # A Framework for Fuzz Target Generation and Evaluation
 
 This framework generates fuzz targets for real-world `C`/`C++` projects with
@@ -88,3 +89,6 @@ OSS-Fuzz build process for the entire project.
 
 ## Citing This Work
 Please click on the _'Cite this repository'_ button located on the right-hand side of this GitHub page for citation details.
+=======
+# fuzzGen
+>>>>>>> a12bf13b17d35d0371d980940a584c9cb636f895
