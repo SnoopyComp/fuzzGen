@@ -1,0 +1,169 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libraw-_zn6libraw17crxloaddecodeloopepvi / 02</h1>
+Bug: True
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+<h2>Triage</h2>
+<pre>
+Crash is caused by bug in fuzz driver.
+
+The fuzz driver constructs a vector from the input data and passes its data pointer as a `void*` to the `crxLoadDecodeLoop` function. However, it does not ensure that the vector size is sufficient for the function&#39;s requirements, potentially leading to out-of-bounds reads. This can cause a segmentation fault when the function tries to access memory beyond the allocated vector. Proper validation of the vector size before passing it to the function is necessary to prevent such crashes.
+</pre>
+<br>
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;vector&gt;
+
+// Include the necessary headers for LibRaw (assuming it&#39;s provided in your build environment)
+// #include &#34;libraw/libraw.h&#34;
+
+namespace LibRaw {
+    void crxLoadDecodeLoop(void *, int);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Construct the FuzzedDataProvider from the input data
+    FuzzedDataProvider fuzzed_data_provider(data, size);
+    
+    // Determine the size of the vector to be passed as the first argument
+    size_t vector_size = fuzzed_data_provider.ConsumeIntegralInRange&lt;size_t&gt;(0, size);
+    
+    // Consume part of the input data as the vector
+    std::vector&lt;uint8_t&gt; arg1_data = fuzzed_data_provider.ConsumeBytes&lt;uint8_t&gt;(vector_size);
+    
+    // Ensure the vector has enough data and isn&#39;t empty
+    if (arg1_data.empty()) {
+        return 0;
+    }
+    
+    // Cast the vector data pointer to void*
+    void *arg1 = static_cast&lt;void*&gt;(arg1_data.data());
+    
+    // Consume an integer value for the second argument
+    int arg2 = fuzzed_data_provider.ConsumeIntegral&lt;int&gt;();
+    
+    // Call the function-under-test
+    LibRaw::crxLoadDecodeLoop(arg1, arg2);
+    
+    return 0;
+}
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/noexample1_3/output-libraw-_zn6libraw17crxloaddecodeloopepvi/fixed_targets/02.cc with gpt-4o in 0 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/noexample1_3/output-libraw-_zn6libraw17crxloaddecodeloopepvi/fixed_targets/02.cc with gpt-4o.
+Result for libraw-zn6libraw17crxloaddecodeloopepvi-02: crashes=True, coverage=0.0013573892879362027 (24/17681), coverage diff=0.0 (0/36937)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/noexample1_3/output-libraw-_zn6libraw17crxloaddecodeloopepvi/corpora/02.cc:/tmp/libraw_cr2_fuzzer_corpus -v /tmp/tmpb8d34euv/build/out/libraw-zn6libraw17crxloaddecodeloopepvi-02:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer libraw_cr2_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/libraw_cr2_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: libraw_cr2_fuzzer_seed_corpus.zip
+/out/libraw_cr2_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/libraw_cr2_fuzzer_corpus &lt; /dev/null
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3654765371
+INFO: Loaded 1 modules   (17681 inline 8-bit counters): 17681 [0x561b43035388, 0x561b43039899), 
+INFO: Loaded 1 PC tables (17681 PCs): 17681 [0x561b430398a0,0x561b4307e9b0), 
+INFO:        3 files found in /tmp/libraw_cr2_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 1048576 bytes
+INFO: seed corpus: files: 3 min: 6884212b max: 12304199b total: 27614165b rss: 32Mb
+#4	INITED cov: 24 ft: 25 corp: 1/1024Kb exec/s: 0 rss: 44Mb
+#8	REDUCE cov: 24 ft: 25 corp: 1/593Kb lim: 1048576 exec/s: 0 rss: 48Mb L: 607269/607269 MS: 4 ChangeBit-ChangeASCIIInt-ChangeBinInt-EraseBytes-
+#20	REDUCE cov: 24 ft: 25 corp: 1/481Kb lim: 1048576 exec/s: 0 rss: 48Mb L: 493404/493404 MS: 2 ChangeBinInt-EraseBytes-
+#32	REDUCE cov: 24 ft: 25 corp: 1/454Kb lim: 1048576 exec/s: 0 rss: 48Mb L: 464993/464993 MS: 2 ChangeBit-EraseBytes-
+#42	REDUCE cov: 24 ft: 25 corp: 1/360Kb lim: 1048576 exec/s: 0 rss: 49Mb L: 368734/368734 MS: 5 InsertRepeatedBytes-ChangeBit-ChangeBinInt-ChangeASCIIInt-EraseBytes-
+#62	REDUCE cov: 24 ft: 25 corp: 1/332Kb lim: 1048576 exec/s: 0 rss: 49Mb L: 340967/340967 MS: 5 ChangeBit-ChangeBit-ShuffleBytes-ChangeByte-EraseBytes-
+#68	REDUCE cov: 24 ft: 25 corp: 1/231Kb lim: 1048576 exec/s: 0 rss: 49Mb L: 237170/237170 MS: 1 EraseBytes-
+#98	REDUCE cov: 24 ft: 25 corp: 1/169Kb lim: 1048576 exec/s: 0 rss: 49Mb L: 173091/173091 MS: 5 ChangeBit-CopyPart-ShuffleBytes-InsertByte-EraseBytes-
+#99	REDUCE cov: 24 ft: 25 corp: 1/166Kb lim: 1048576 exec/s: 0 rss: 49Mb L: 170269/170269 MS: 1 EraseBytes-
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+[1m[31m==13==ERROR: AddressSanitizer: SEGV on unknown address 0x0000081c3459 (pc 0x561b42dbaba4 bp 0x7fffb992d510 sp 0x7fffb992d420 T0)
+[1m[0m==13==The signal is caused by a READ memory access.
+SCARINESS: 20 (wild-addr-read)
+    #0 0x561b42dbaba4 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+    #1 0x561b42dc597a in LibRaw::crxLoadDecodeLoop(void*, int) /src/libraw/src/decoders/crx.cpp:2636:9
+    #2 0x561b42d6af77 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:33:5
+    #3 0x561b42c1d5c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+    #4 0x561b42c1cde5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+    #5 0x561b42c1e5b5 in fuzzer::Fuzzer::MutateAndTestOne() /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:760:19
+    #6 0x561b42c1f3a5 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:905:5
+    #7 0x561b42c0d6b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+    #8 0x561b42c39be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+    #9 0x7fb3cb113082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+    #10 0x561b42bfe82d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+
+DEDUP_TOKEN: LibRaw::crxDecodePlane(void*, unsigned int)--LibRaw::crxLoadDecodeLoop(void*, int)--LLVMFuzzerTestOneInput
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/libraw/src/decoders/crx.cpp:1895:34 in LibRaw::crxDecodePlane(void*, unsigned int)
+==13==ABORTING
+MS: 5 InsertRepeatedBytes-InsertRepeatedBytes-InsertRepeatedBytes-ChangeBit-EraseBytes-; base unit: 3a9620f67350806d77b5ae084bfa9b0cb9b5a3af
+artifact_prefix=&#39;./&#39;; Test unit written to ./crash-17b12f0a2177e840a6d6a12eb60e1a4c0da2bf86
+stat::number_of_executed_units: 134
+stat::average_exec_per_sec:     0
+stat::new_units_added:          8
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              50
+
+</pre>
+
+
+</body>
