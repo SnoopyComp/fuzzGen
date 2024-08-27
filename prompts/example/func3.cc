@@ -1,30 +1,48 @@
 #include <fuzzer/FuzzedDataProvider.h>
-#include <cstddef>
-#include <cstdint>
-#include <vector>
 #include "/src/libraw/libraw/libraw.h"
+#include <vector>
+#include <cstring> // For memset
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    FuzzedDataProvider stream(data, size);
+// Derived class to expose the protected crxDecodePlane method
+class LibRawFuzzer : public LibRaw {
+public:
+    using LibRaw::crxDecodePlane;
+};
 
-    // Generate a random size for the buffer
-    uint32_t buffer_size = stream.ConsumeIntegral<uint32_t>();
+// Fuzzing entry point
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the FuzzedDataProvider with fuzzing data
+    FuzzedDataProvider fuzzedDataProvider(data, size);
 
-    // Create a buffer of the generated size
-    std::vector<uint8_t> buffer(buffer_size);
+    // Ensure there is enough data to proceed
+    if (size < sizeof(uint32_t)) {
+        return 0;
+    }
 
-    // Fill the buffer with fuzzed data
-    stream.ConsumeData(buffer.data(), buffer.size());
+    // Consume a vector of bytes to use as the void* parameter
+    std::vector<uint8_t> buffer = fuzzedDataProvider.ConsumeBytes<uint8_t>(fuzzedDataProvider.remaining_bytes());
+    void* buffer_ptr = buffer.data();
 
-    // Create an instance of LibRaw
-    LibRaw libraw_instance;
+    // Consume a uint32_t value for the second parameter
+    uint32_t uint32_param = fuzzedDataProvider.ConsumeIntegral<uint32_t>();
 
-    // Since crxDecodePlane is a protected member, we cannot call it directly.
-    // Instead, we can call a public method that internally uses crxDecodePlane.
-    // For example, we can use the open_buffer method which is public and processes raw data.
+    // Ensure the buffer is not empty and properly allocated
+    if (!buffer.empty() && uint32_param > 0) {
+        // Allocate a buffer for the crxDecodePlane function
+        std::vector<uint8_t> decodeBuffer(uint32_param);
+        void* decodeBuffer_ptr = decodeBuffer.data();
 
-    // Call the function-under-test
-    int result = libraw_instance.open_buffer(buffer.data(), buffer_size);
+        // Initialize the decode buffer to avoid uninitialized memory issues
+        std::memset(decodeBuffer_ptr, 0, uint32_param);
+
+        // Call the function-under-test
+        LibRawFuzzer libRawInstance;
+        try {
+            libRawInstance.crxDecodePlane(decodeBuffer_ptr, uint32_param);
+        } catch (...) {
+            // Catch any exceptions to prevent the fuzzer from crashing
+        }
+    }
 
     return 0;
 }

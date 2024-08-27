@@ -1,5 +1,5 @@
 #include <fuzzer/FuzzedDataProvider.h>
-#include "/src/libraw/libraw/libraw.h"  // Corrected path for LibRaw header
+#include <libraw/libraw.h>
 #include <vector>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
@@ -25,17 +25,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
 
     // Process the image (this function does some processing based on the unpacked data)
-    int result = rawProcessor.dcraw_process();
-    if (result != LIBRAW_SUCCESS) {
+    int process_result = rawProcessor.dcraw_process();
+    if (process_result != LIBRAW_SUCCESS) {
         return 0; // Return if processing fails
     }
 
     // Call the sraw_midpoint function as required
     int midpoint_result = rawProcessor.sraw_midpoint();
-    if (midpoint_result != LIBRAW_SUCCESS) {
-        return 0; // Return if sraw_midpoint fails
-    }
 
     // Return the result
-    return 0;
+    return midpoint_result;
 }
