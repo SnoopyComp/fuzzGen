@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libraw-_zn6libraw14crxdecodeplaneepvj",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "True",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "DRIVER",
+        "coverage": "0.29",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n#include <vector>\\n#include \"/src/libraw/libraw/libraw.h\" // Ensure the correct path to the LibRaw header file\\n\\nclass MyLibRaw : public LibRaw {\\npublic:\\n    using LibRaw::crxDecodePlane; // Expose the protected member function\\n};\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize the FuzzedDataProvider with the input data\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Consume a uint32_t value from the fuzzed data\\n    uint32_t param2 = fuzzed_data.ConsumeIntegral<uint32_t>();\\n\\n    // Consume the remaining bytes as a vector\\n    std::vector<uint8_t> remaining_bytes = fuzzed_data.ConsumeRemainingBytes<uint8_t>();\\n\\n    // Ensure the data pointer is not null and has a minimum size\\n    void *param1 = remaining_bytes.data();\\n    size_t param1_size = remaining_bytes.size();\\n\\n    // Call the function-under-test\\n    if (param1 != nullptr && param1_size > 0) {\\n        MyLibRaw libraw_instance;\\n        try {\\n            // Ensure param2 is within a reasonable range to prevent out-of-bounds access\\n            if (param2 < param1_size) {\\n                libraw_instance.crxDecodePlane(param1, param2);\\n            }\\n        } catch (...) {\\n            // Handle any exceptions thrown by the function-under-test\\n        }\\n    }\\n\\n    return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libraw-_zn6libraw14crxdecodeplaneepvj",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "True",
+        "crash_reason": "FP_NEAR_INIT_CRASH",
+        "bug": "False",
+        "triage": "DRIVER",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n#include \"libraw.h\"  // Ensure this header is included for the function declaration\\n#include <vector>\\n#include <stdexcept>\\n#include <cstring>  // For std::memset\\n#include <cstdlib>  // For std::malloc and std::free\\n\\n// Derived class to access the protected member function\\nclass LibRawDerived : public LibRaw {\\npublic:\\n    using LibRaw::crxDecodePlane;\\n};\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize FuzzedDataProvider with the input data\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Consume a uint32_t value for the second parameter\\n    uint32_t param2 = fuzzed_data.ConsumeIntegral<uint32_t>();\\n\\n    // Ensure there's enough data left for a minimum valid size\\n    if (size < sizeof(void*) + sizeof(uint32_t)) {\\n        return 0;\\n    }\\n\\n    // Consume the remaining bytes for the first parameter\\n    std::vector<uint8_t> remaining_bytes = fuzzed_data.ConsumeRemainingBytes<uint8_t>();\\n\\n    // Allocate a buffer for param1 and copy the remaining bytes into it\\n    void *param1 = nullptr;\\n    if (!remaining_bytes.empty()) {\\n        param1 = std::malloc(remaining_bytes.size());\\n        if (param1 == nullptr) {\\n            return 0;  // Allocation failed\\n        }\\n        std::memset(param1, 0, remaining_bytes.size());  // Initialize to zero for safety\\n        std::memcpy(param1, remaining_bytes.data(), remaining_bytes.size());\\n    } else {\\n        // If remaining_bytes is empty, allocate a minimal buffer to avoid null pointer dereference\\n        param1 = std::malloc(1);\\n        if (param1 == nullptr) {\\n            return 0;  // Allocation failed\\n        }\\n        std::memset(param1, 0, 1);  // Initialize to zero for safety\\n    }\\n\\n    // Create an instance of the derived class\\n    LibRawDerived libraw_instance;\\n\\n    try {\\n        // Call the function-under-test\\n        int result = libraw_instance.crxDecodePlane(param1, param2);\\n    } catch (const std::exception &e) {\\n        // Handle any exceptions that might be thrown\\n        // This is just for robustness; in a real fuzz target, you might want to log this\\n        std::free(param1);\\n        return 0;\\n    }\\n\\n    std::free(param1);\\n    return 0;\\n}",
+        "model": ""
+    }
+
+    ]
+}

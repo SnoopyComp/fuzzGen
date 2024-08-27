@@ -3,8 +3,15 @@
 #  $3: memory format
 #!/bin/bash
 
-directory_name=$1
+if [-f .env ]; then
+	export $(cat .env | xargs)
+fi
 
+export OPENAI_API_KEY=$OPENAI_API_KEY
+
+
+
+directory_name=$1
 
 if [ -n "$3" ]; then
 	docker rm $(docker ps -qa)
@@ -18,7 +25,7 @@ for ((var=1; var<=$2; var++));
 do
 	./run_all_experiments.py\
 		--model='gpt-4o'\
-		-y ./benchmark-sets/all/libraw.yaml \
+		-y ./benchmark-sets/all/libraw.yaml\
 		--work-dir=results/${directory_name}$var
 
 	python3.11 -m report.web -r results/${directory_name}$var -o outputs/${directory_name}$var

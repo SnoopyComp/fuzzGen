@@ -261,6 +261,7 @@ class GPT4o(GPT):
   """OpenAI's GPTi-4 model."""
 
   name = 'gpt-4o'
+  context_window = 200000
 
 
 class AzureGPT(GPT):
