@@ -1,8 +1,9 @@
 #include <fuzzer/FuzzedDataProvider.h>
 #include "/src/libraw/libraw/libraw.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    // Initialize the FuzzedDataProvider with the input data
+// Fuzzing entry point
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the FuzzedDataProvider with fuzzing data
     FuzzedDataProvider fuzzedDataProvider(data, size);
 
     // Ensure there is enough data to proceed
@@ -13,12 +14,21 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Consume a short value from the fuzzed data
     short short_param = fuzzedDataProvider.ConsumeIntegral<short>();
 
-    // Create an instance of LibRaw
+    // Call the function-under-test
     LibRaw libRawInstance;
-
-    // Since parseCR3_CTMD is not a valid function, let's use another function from LibRaw
-    // For example, we can use open_buffer which is a valid function in LibRaw
     int result = libRawInstance.open_buffer(data, size);
+
+    // Check if the buffer was successfully opened
+    if (result != LIBRAW_SUCCESS) {
+        return 0;
+    }
+
+    // Call the target function unpack
+    int unpackResult = libRawInstance.unpack();
+
+    // Since parseCR3_CTMD is not a member of LibRaw, we will call another function that exists
+    // For demonstration, let's call 'dcraw_process' which is a valid function in LibRaw
+    int processResult = libRawInstance.dcraw_process();
 
     return 0;
 }

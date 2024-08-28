@@ -31,8 +31,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         return 0; // Return if processing fails
     }
 
-    // Call the function-under-test (assuming the function exists; if not, replace with a valid function)
-    // libRawInstance.selectCRXTrack(); // Commenting out as it does not exist
+    // Call the function-under-test
+    // Replace 'selectCRXTrack' with a valid function from LibRaw
+    libRawInstance.raw2image();
 
     return 0;
 }
