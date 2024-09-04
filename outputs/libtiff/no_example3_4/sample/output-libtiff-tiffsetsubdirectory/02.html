@@ -1,0 +1,755 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tiffsetsubdirectory / 02</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Create a temporary file name
+    std::string filename = &#34;/tmp/fuzz_test.tiff&#34;;
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Write some minimal required tags to make it a valid TIFF file
+    uint32_t width = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint32_t length = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint16_t samples_per_pixel = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(1, 4);
+    uint16_t bits_per_sample = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(8, 16);
+    uint16_t orientation = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(ORIENTATION_TOPLEFT, ORIENTATION_BOTRIGHT);
+    uint16_t planar_config = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE);
+    uint16_t photometric = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PHOTOMETRIC_MINISWHITE, PHOTOMETRIC_RGB);
+    
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, length);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, bits_per_sample);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, orientation);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, planar_config);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, photometric);
+    
+    // Write pixel data
+    std::vector&lt;uint8_t&gt; pixel_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(width * length * samples_per_pixel * (bits_per_sample / 8));
+    if (pixel_data.empty()) {
+        pixel_data.resize(width * length * samples_per_pixel * (bits_per_sample / 8), 0);
+    }
+    TIFFWriteEncodedStrip(tiff, 0, pixel_data.data(), pixel_data.size());
+    
+    // Close the TIFF file to flush the data
+    TIFFClose(tiff);
+    
+    // Reopen the TIFF file for reading and writing
+    tiff = TIFFOpen(filename.c_str(), &#34;r+&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Ensure the TIFF file has at least one valid subdirectory
+    TIFFCreateDirectory(tiff);
+    TIFFWriteDirectory(tiff);
+    
+    // Get the offset of the current directory
+    uint64_t current_offset = TIFFCurrentDirOffset(tiff);
+    
+    // Consume a uint64_t value for the subdirectory offset within a valid range
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegralInRange&lt;uint64_t&gt;(0, current_offset);
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Consume a random length string to simulate a TIFF filename
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: No code coverage increasement, indicating the fuzz target ineffectively invokes the function under test.
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+To address the issue of no code coverage increase, the fuzz target should be modified to ensure that the function under test is being invoked effectively. The problem might be that the filename generated by `ConsumeRandomLengthString` does not correspond to a valid in-memory TIFF file, and thus `TIFFOpen` fails, resulting in the function `TIFFSetSubDirectory` never being called.
+
+One way to fix this is to create a valid in-memory TIFF file that can be opened and manipulated. Below is the updated code:
+
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Create a temporary file name
+    std::string filename = &#34;/tmp/fuzz_test.tiff&#34;;
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Write some minimal required tags to make it a valid TIFF file
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, 1);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, 1);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, 1);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, 8);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+    
+    // Write a single pixel
+    uint8_t pixel = 0;
+    TIFFWriteEncodedStrip(tiff, 0, &amp;pixel, 1);
+    
+    // Close the TIFF file to flush the data
+    TIFFClose(tiff);
+    
+    // Reopen the TIFF file for reading and writing
+    tiff = TIFFOpen(filename.c_str(), &#34;r+&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+```
+
+### Explanation of Changes:
+1. **Filename:** Changed the filename to a fixed temporary file path (`/tmp/fuzz_test.tiff`), ensuring it is a valid file path.
+2. **Create Valid TIFF:** Created a minimal valid TIFF file by setting essential TIFF tags and writing a single pixel to it. This ensures that `TIFFOpen` will succeed.
+3. **Reopen TIFF:** Closed the TIFF file after writing to flush the data and then reopened it for reading and writing. This ensures that the file is properly set up before calling `TIFFSetSubDirectory`.
+
+These changes should ensure that the function under test is invoked effectively, and the fuzzing process will have meaningful coverage.
+</pre>
+
+
+<h3>Fixer prompt #2</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Create a temporary file name
+    std::string filename = &#34;/tmp/fuzz_test.tiff&#34;;
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Write some minimal required tags to make it a valid TIFF file
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, 1);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, 1);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, 1);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, 8);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+    
+    // Write a single pixel
+    uint8_t pixel = 0;
+    TIFFWriteEncodedStrip(tiff, 0, &amp;pixel, 1);
+    
+    // Close the TIFF file to flush the data
+    TIFFClose(tiff);
+    
+    // Reopen the TIFF file for reading and writing
+    tiff = TIFFOpen(filename.c_str(), &#34;r+&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: No code coverage increasement, indicating the fuzz target ineffectively invokes the function under test.
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #2</h3>
+
+<pre>
+Certainly! To ensure that the fuzz target effectively invokes the function under test and maximizes code coverage, we can make the following improvements:
+
+1. Ensure the fuzzed data is used to generate a more complex TIFF file.
+2. Use the fuzzed data to set various TIFF tags and write more data to the file.
+3. Make sure the fuzzed data is not null before invoking the function under test.
+
+Here is the updated code:
+
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Create a temporary file name
+    std::string filename = &#34;/tmp/fuzz_test.tiff&#34;;
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Write some minimal required tags to make it a valid TIFF file
+    uint32_t width = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint32_t length = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint16_t samples_per_pixel = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(1, 4);
+    uint16_t bits_per_sample = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(8, 16);
+    uint16_t orientation = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(ORIENTATION_TOPLEFT, ORIENTATION_BOTRIGHT);
+    uint16_t planar_config = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE);
+    uint16_t photometric = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PHOTOMETRIC_MINISWHITE, PHOTOMETRIC_RGB);
+    
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, length);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, bits_per_sample);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, orientation);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, planar_config);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, photometric);
+    
+    // Write pixel data
+    std::vector&lt;uint8_t&gt; pixel_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(width * length * samples_per_pixel * (bits_per_sample / 8));
+    if (pixel_data.empty()) {
+        pixel_data.resize(width * length * samples_per_pixel * (bits_per_sample / 8), 0);
+    }
+    TIFFWriteEncodedStrip(tiff, 0, pixel_data.data(), pixel_data.size());
+    
+    // Close the TIFF file to flush the data
+    TIFFClose(tiff);
+    
+    // Reopen the TIFF file for reading and writing
+    tiff = TIFFOpen(filename.c_str(), &#34;r+&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+```
+
+Changes made:
+1. Used `FuzzedDataProvider` to generate more complex values for TIFF tags.
+2. Ensured that pixel data is written to the TIFF file using fuzzed data.
+3. Checked if the pixel data is empty and resized it if necessary to prevent null input.
+4. Utilized the fuzzed data to set various TIFF tags and write more data to the file to maximize the fuzzing result.
+
+This should help in increasing the code coverage by making the input more varied and ensuring the function under test is effectively invoked.
+</pre>
+
+
+<h3>Fixer prompt #3</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Create a temporary file name
+    std::string filename = &#34;/tmp/fuzz_test.tiff&#34;;
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Write some minimal required tags to make it a valid TIFF file
+    uint32_t width = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint32_t length = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint16_t samples_per_pixel = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(1, 4);
+    uint16_t bits_per_sample = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(8, 16);
+    uint16_t orientation = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(ORIENTATION_TOPLEFT, ORIENTATION_BOTRIGHT);
+    uint16_t planar_config = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE);
+    uint16_t photometric = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PHOTOMETRIC_MINISWHITE, PHOTOMETRIC_RGB);
+    
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, length);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, bits_per_sample);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, orientation);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, planar_config);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, photometric);
+    
+    // Write pixel data
+    std::vector&lt;uint8_t&gt; pixel_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(width * length * samples_per_pixel * (bits_per_sample / 8));
+    if (pixel_data.empty()) {
+        pixel_data.resize(width * length * samples_per_pixel * (bits_per_sample / 8), 0);
+    }
+    TIFFWriteEncodedStrip(tiff, 0, pixel_data.data(), pixel_data.size());
+    
+    // Close the TIFF file to flush the data
+    TIFFClose(tiff);
+    
+    // Reopen the TIFF file for reading and writing
+    tiff = TIFFOpen(filename.c_str(), &#34;r+&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: No code coverage increasement, indicating the fuzz target ineffectively invokes the function under test.
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #3</h3>
+
+<pre>
+To address the issue of no code coverage increment, we need to ensure that the fuzz target effectively invokes the function under test (`TIFFSetSubDirectory`) with valid and varied inputs. Here are the steps to improve the fuzz target:
+
+1. **Ensure the TIFF file is properly created and contains valid data.**
+2. **Make sure the `subdir_offset` is within a valid range.**
+
+Here&#39;s the updated code:
+
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstddef&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize the fuzzed data provider
+    FuzzedDataProvider fuzzed_data(data, size);
+    
+    // Create a temporary file name
+    std::string filename = &#34;/tmp/fuzz_test.tiff&#34;;
+    
+    // Open a TIFF file in memory
+    TIFF* tiff = TIFFOpen(filename.c_str(), &#34;w&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Write some minimal required tags to make it a valid TIFF file
+    uint32_t width = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint32_t length = fuzzed_data.ConsumeIntegralInRange&lt;uint32_t&gt;(1, 1000);
+    uint16_t samples_per_pixel = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(1, 4);
+    uint16_t bits_per_sample = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(8, 16);
+    uint16_t orientation = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(ORIENTATION_TOPLEFT, ORIENTATION_BOTRIGHT);
+    uint16_t planar_config = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE);
+    uint16_t photometric = fuzzed_data.ConsumeIntegralInRange&lt;uint16_t&gt;(PHOTOMETRIC_MINISWHITE, PHOTOMETRIC_RGB);
+    
+    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, length);
+    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);
+    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, bits_per_sample);
+    TIFFSetField(tiff, TIFFTAG_ORIENTATION, orientation);
+    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, planar_config);
+    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, photometric);
+    
+    // Write pixel data
+    std::vector&lt;uint8_t&gt; pixel_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(width * length * samples_per_pixel * (bits_per_sample / 8));
+    if (pixel_data.empty()) {
+        pixel_data.resize(width * length * samples_per_pixel * (bits_per_sample / 8), 0);
+    }
+    TIFFWriteEncodedStrip(tiff, 0, pixel_data.data(), pixel_data.size());
+    
+    // Close the TIFF file to flush the data
+    TIFFClose(tiff);
+    
+    // Reopen the TIFF file for reading and writing
+    tiff = TIFFOpen(filename.c_str(), &#34;r+&#34;);
+    if (!tiff) {
+        return 0;
+    }
+    
+    // Ensure the TIFF file has at least one valid subdirectory
+    TIFFCreateDirectory(tiff);
+    TIFFWriteDirectory(tiff);
+    
+    // Get the offset of the current directory
+    uint64_t current_offset = TIFFCurrentDirOffset(tiff);
+    
+    // Consume a uint64_t value for the subdirectory offset within a valid range
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegralInRange&lt;uint64_t&gt;(0, current_offset);
+    
+    // Call the function-under-test
+    int result = TIFFSetSubDirectory(tiff, subdir_offset);
+    
+    // Close the TIFF file
+    TIFFClose(tiff);
+    
+    return 0;
+}
+```
+
+### Changes made:
+1. **Create a valid subdirectory** in the TIFF file before calling `TIFFSetSubDirectory` to ensure there is at least one valid subdirectory.
+2. **Get the offset of the current directory** using `TIFFCurrentDirOffset` and use this value to constrain the `subdir_offset` to a valid range.
+
+These changes should help ensure that the fuzz target effectively invokes the function under test with valid inputs, leading to better code coverage.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffsetsubdirectory/fixed_targets/02.cc with gpt-4o, attempt 1.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffsetsubdirectory/fixed_targets/02.cc with gpt-4o, attempt 2.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffsetsubdirectory/fixed_targets/02.cc with gpt-4o, attempt 3.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffsetsubdirectory/fixed_targets/02.cc with gpt-4o in 3 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffsetsubdirectory/fixed_targets/02.cc with gpt-4o.
+Warning: no crash info in libtiff-tiffsetsubdirectory-02.
+Warning: No cov info in run result of libtiff-tiffsetsubdirectory-02.
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffsetsubdirectory/corpora/02.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmp7llttpba/build/out/libtiff-tiffsetsubdirectory-02:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: tiff_read_rgba_fuzzer_seed_corpus.zip
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+Dictionary: 40 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 939668959
+INFO: Loaded 1 modules   (26949 inline 8-bit counters): 26949 [0x560b96438f18, 0x560b9643f85d), 
+INFO: Loaded 1 PC tables (26949 PCs): 26949 [0x560b9643f860,0x560b964a8cb0), 
+INFO:     6502 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 16832 bytes
+INFO: seed corpus: files: 6502 min: 1b max: 16832b total: 6363517b rss: 39Mb
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: War
+...truncated...
+l. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+#7028	REDUCE cov: 720 ft: 1020 corp: 35/11476b lim: 16832 exec/s: 234 rss: 62Mb L: 136/7160 MS: 5 InsertByte-PersAutoDict-ShuffleBytes-PersAutoDict-EraseBytes- DE: &#34;%\001&#34;-&#34;\025\001&#34;-
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+#7099	REDUCE cov: 720 ft: 1020 corp: 35/11472b lim: 16832 exec/s: 236 rss: 62Mb L: 5/7160 MS: 1 EraseBytes-
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+TIFFReadDirectory: Warning, Sum of Photometric type-related color channels and ExtraSamples doesn&#39;t match SamplesPerPixel. Defining non-color channels as ExtraSamples..
+#7104	DONE   cov: 720 ft: 1020 corp: 35/11472b lim: 16832 exec/s: 229 rss: 62Mb
+###### Recommended dictionary. ######
+&#34;\005\001&#34; # Uses: 10
+&#34;\371\377\377\377&#34; # Uses: 3
+&#34;\377\377\377\377\377\377\377\377&#34; # Uses: 3
+&#34;\376\377\377\354&#34; # Uses: 3
+&#34;\000\000\000\375&#34; # Uses: 2
+###### End of recommended dictionary. ######
+Done 7104 runs in 31 second(s)
+stat::number_of_executed_units: 7104
+stat::average_exec_per_sec:     229
+stat::new_units_added:          31
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              62
+
+</pre>
+
+
+</body>

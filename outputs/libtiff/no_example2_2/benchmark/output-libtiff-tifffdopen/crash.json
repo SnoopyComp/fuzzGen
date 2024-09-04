@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tifffdopen",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.86",
+        "coverage_diff": "0.003039268965239619",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstdlib>\\n#include <cstring>\\n#include <string>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <fcntl.h>\\n#include <unistd.h>\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Create a temporary file to get a valid file descriptor\\n    char tmp_filename[] = \"/tmp/fuzz_tiff_XXXXXX\";\\n    int fd = mkstemp(tmp_filename);\\n    if (fd == -1) {\\n        return 0; // If we can't create a temp file, exit early\\n    }\\n\\n    // Write the fuzzed data to the temporary file\\n    if (write(fd, data, size) != static_cast<ssize_t>(size)) {\\n        close(fd);\\n        unlink(tmp_filename);\\n        return 0; // If we can't write to the file, exit early\\n    }\\n\\n    // Reset the file descriptor offset to the beginning of the file\\n    lseek(fd, 0, SEEK_SET);\\n\\n    // Consume a string for the mode\\n    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);\\n    if (mode.empty()) {\\n        mode = \"r\"; // Default to read mode if the mode string is empty\\n    }\\n    const char *mode_cstr = mode.c_str();\\n\\n    // Consume a string for the name\\n    std::string name = fuzzed_data.ConsumeRandomLengthString(100);\\n    if (name.empty()) {\\n        name = \"default\"; // Default to \"default\" if the name string is empty\\n    }\\n    const char *name_cstr = name.c_str();\\n\\n    // Call the function-under-test\\n    TIFF *tiff = TIFFFdOpen(fd, name_cstr, mode_cstr);\\n\\n    // If the TIFF object is successfully created, close it\\n    if (tiff != nullptr) {\\n        TIFFClose(tiff);\\n    }\\n\\n    // Clean up: close the file descriptor and remove the temporary file\\n    close(fd);\\n    unlink(tmp_filename);\\n\\n    return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tifffdopen",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "8.97",
+        "coverage_diff": "0.006038282712396595",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstddef>\\n#include <string>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <unistd.h>\\n#include <fcntl.h>\\n#include <vector>\\n#include <cstring>\\n#include <cstdio> // For remove()\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize FuzzedDataProvider with the input data\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Create a temporary file to use for fuzzing\\n    char temp_filename[] = \"/tmp/fuzz-XXXXXX\";\\n    int fd = mkstemp(temp_filename);\\n    if (fd == -1) {\\n        return 0; // If we can't create a temp file, just return\\n    }\\n\\n    // Write the fuzzed data to the temporary file\\n    std::vector<uint8_t> file_data = fuzzed_data.ConsumeBytes<uint8_t>(size);\\n    if (write(fd, file_data.data(), file_data.size()) == -1) {\\n        close(fd);\\n        remove(temp_filename);\\n        return 0;\\n    }\\n\\n    // Close the file descriptor to flush the data\\n    close(fd);\\n\\n    // Reopen the file descriptor for reading\\n    fd = open(temp_filename, O_RDONLY);\\n    if (fd == -1) {\\n        remove(temp_filename);\\n        return 0;\\n    }\\n\\n    // Consume a string for the mode argument\\n    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);\\n    // Ensure the mode string is null-terminated and valid\\n    if (mode.empty() || mode.find_first_not_of(\"rwa+\") != std::string::npos) {\\n        mode = \"r\"; // Default to read mode if invalid\\n    }\\n    mode.push_back('\\0');\\n    const char *mode_cstr = mode.c_str();\\n\\n    // Call the function-under-test\\n    TIFF *tif = TIFFFdOpen(fd, temp_filename, mode_cstr);\\n\\n    // If the function returns a valid TIFF pointer, close it\\n    if (tif != nullptr) {\\n        TIFFClose(tif);\\n    }\\n\\n    // Clean up: close and remove the temporary file\\n    close(fd);\\n    remove(temp_filename);\\n\\n    return 0;\\n}",
+        "model": ""
+    }
+
+    ]
+}

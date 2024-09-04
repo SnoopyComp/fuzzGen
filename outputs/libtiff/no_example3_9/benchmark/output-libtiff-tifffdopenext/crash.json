@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tifffdopenext",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.57",
+        "coverage_diff": "0.0015296982871404706",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstdlib>\\n#include <cstring>\\n#include <string>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n\\n// Ensure that the correct headers are included for TIFF functions and types\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize FuzzedDataProvider with the input data\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Consume an integer for the file descriptor\\n    int fd = fuzzed_data.ConsumeIntegral<int>();\\n\\n    // Consume strings for the name and mode\\n    std::string name = fuzzed_data.ConsumeRandomLengthString(100);\\n    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);\\n\\n    // Since TIFFOpenOptions and TIFFFdOpenExt are not part of the standard TIFF library,\\n    // we will use TIFFClientOpen instead, which allows us to specify custom read/write/seek/close functions.\\n\\n    // Define dummy functions for TIFFClientOpen\\n    auto dummyRead = [](thandle_t, tdata_t, tsize_t) -> tsize_t { return 0; };\\n    auto dummyWrite = [](thandle_t, tdata_t, tsize_t) -> tsize_t { return 0; };\\n    auto dummySeek = [](thandle_t, toff_t, int) -> toff_t { return 0; };\\n    auto dummyClose = [](thandle_t) -> int { return 0; };\\n    auto dummySize = [](thandle_t) -> toff_t { return 0; };\\n    auto dummyMap = [](thandle_t, tdata_t*, toff_t*) -> int { return 0; };\\n    auto dummyUnmap = [](thandle_t, tdata_t, toff_t) -> void { };\\n\\n    // Call the function-under-test using TIFFClientOpen\\n    TIFF *tiff = TIFFClientOpen(name.c_str(), mode.c_str(), (thandle_t)fd, dummyRead, dummyWrite, dummySeek, dummyClose, dummySize, dummyMap, dummyUnmap);\\n\\n    // If the function returns a non-null pointer, close the TIFF object\\n    if (tiff != nullptr) {\\n        TIFFClose(tiff);\\n    }\\n\\n    return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tifffdopenext",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.92",
+        "coverage_diff": "0.003160034619487551",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstdlib>\\n#include <string>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <tiffio.hxx>\\n#include <fcntl.h>\\n#include <unistd.h>\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize FuzzedDataProvider with the input data\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Consume an integer for the file descriptor\\n    int fd = fuzzed_data.ConsumeIntegralInRange<int>(0, 1024);\\n    \\n    // Create a temporary file to use as the file descriptor\\n    char temp_filename[] = \"/tmp/fuzz_tiff_XXXXXX\";\\n    fd = mkstemp(temp_filename);\\n    if (fd == -1) {\\n        return 0;\\n    }\\n\\n    // Consume strings for the mode and name\\n    std::string name = fuzzed_data.ConsumeRandomLengthString(100);\\n    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);\\n\\n    // Open the temporary file with the given mode\\n    FILE *file = fdopen(fd, mode.c_str());\\n    if (!file) {\\n        close(fd);\\n        return 0;\\n    }\\n\\n    // Write some data to the file to ensure it's not empty\\n    std::string file_content = fuzzed_data.ConsumeRandomLengthString(size);\\n    fwrite(file_content.c_str(), 1, file_content.size(), file);\\n    fflush(file);\\n    fseek(file, 0, SEEK_SET);\\n\\n    // Call the function under test\\n    TIFFOpenOptions *opts = TIFFOpenOptionsAlloc();\\n    TIFF *tiff = TIFFFdOpenExt(fd, name.c_str(), mode.c_str(), opts);\\n    TIFFOpenOptionsFree(opts);\\n\\n    // If tiff is not null, close it\\n    if (tiff) {\\n        TIFFClose(tiff);\\n    }\\n\\n    // Close the file and remove the temporary file\\n    fclose(file);\\n    unlink(temp_filename);\\n\\n    return 0;\\n}",
+        "model": ""
+    }
+
+    ]
+}

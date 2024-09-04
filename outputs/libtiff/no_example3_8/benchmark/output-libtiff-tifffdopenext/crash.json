@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tifffdopenext",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_COV_INCREASE",
+        "bug": "False",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstdlib>\\n#include <cstring>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <fcntl.h> // Include for open() and O_RDWR\\n#include <unistd.h> // Include for close()\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    FuzzedDataProvider fuzzed_data_provider(data, size);\\n\\n    // Generate fuzzed inputs for the function parameters\\n    std::string name = fuzzed_data_provider.ConsumeRandomLengthString(100);\\n    const char *name_cstr = name.c_str();\\n\\n    std::string mode = fuzzed_data_provider.ConsumeRandomLengthString(10);\\n    const char *mode_cstr = mode.c_str();\\n\\n    // Open a temporary file to get a valid file descriptor\\n    int fd = open(\"/tmp/fuzz_tiff_temp\", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);\\n    if (fd == -1) {\\n        return 0; // If file descriptor cannot be opened, return early\\n    }\\n\\n    // Write the fuzzed data to the file to ensure it contains some data\\n    if (write(fd, data, size) != static_cast<ssize_t>(size)) {\\n        close(fd);\\n        return 0; // If writing fails, return early\\n    }\\n\\n    // Seek back to the beginning of the file\\n    if (lseek(fd, 0, SEEK_SET) == -1) {\\n        close(fd);\\n        return 0; // If seeking fails, return early\\n    }\\n\\n    // Call TIFFFdOpen instead of TIFFFdOpenExt\\n    TIFF *tiff = TIFFFdOpen(fd, name_cstr, mode_cstr);\\n\\n    // If tiff is not null, close it to avoid resource leaks\\n    if (tiff != nullptr) {\\n        TIFFClose(tiff);\\n    }\\n\\n    // Close the file descriptor\\n    close(fd);\\n\\n    return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tifffdopenext",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstring>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <fcntl.h>\\n#include <unistd.h>\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize the FuzzedDataProvider with the provided data and size\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Consume a string for the mode (e.g., \"r\", \"w\", etc.)\\n    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);\\n    const char *mode_cstr = mode.c_str();\\n\\n    // Consume a string for the name\\n    std::string name = fuzzed_data.ConsumeRandomLengthString(100);\\n    const char *name_cstr = name.c_str();\\n\\n    // Create a temporary file to use for the file descriptor\\n    int fd = open(\"/tmp/fuzz_tiff_temp\", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);\\n    if (fd == -1) {\\n        return 0; // If we cannot create a temporary file, return early\\n    }\\n\\n    // Write the fuzzed data to the temporary file\\n    write(fd, data, size);\\n    lseek(fd, 0, SEEK_SET); // Reset file pointer to the beginning\\n\\n    // Call the function-under-test\\n    TIFFOpenOptions *options = nullptr; // Assuming no special options are needed\\n    TIFF *tiff = TIFFFdOpenExt(fd, name_cstr, mode_cstr, options);\\n\\n    // If the function returns a valid TIFF pointer, close it to avoid resource leaks\\n    if (tiff != nullptr) {\\n        TIFFClose(tiff);\\n    }\\n\\n    // Close the file descriptor and remove the temporary file\\n    close(fd);\\n    unlink(\"/tmp/fuzz_tiff_temp\");\\n\\n    return 0;\\n}",
+        "model": ""
+    }
+
+    ]
+}

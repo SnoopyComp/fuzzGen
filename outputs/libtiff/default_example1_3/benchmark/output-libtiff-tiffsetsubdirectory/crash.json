@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tiffsetsubdirectory",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n\\n#include <cstdint>\\n#include <cstdlib>\\n#include <sstream>\\n#include <tiffio.h>\\n#include <tiffio.hxx>\\n\\nextern \"C\" void handle_error(const char *unused, const char *unused2, va_list unused3) { return; }\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n#ifndef STANDALONE\\n  TIFFSetErrorHandler(handle_error);\\n  TIFFSetWarningHandler(handle_error);\\n#endif\\n\\n  if (size < sizeof(uint64_t)) {\\n    return 0;\\n  }\\n\\n  std::istringstream s(std::string(data, data + size));\\n  TIFF *tif = TIFFStreamOpen(\"MemTIFF\", &s);\\n  if (!tif) {\\n    return 0;\\n  }\\n\\n  FuzzedDataProvider provider(data, size);\\n  uint64_t subdir_offset = provider.ConsumeIntegral<uint64_t>();\\n\\n  // Call the function-under-test\\n  TIFFSetSubDirectory(tif, subdir_offset);\\n\\n  TIFFClose(tif);\\n  return 0;\\n}\\n\\n#ifdef STANDALONE\\n\\ntemplate <class T> static void CPL_IGNORE_RET_VAL(T) {}\\n\\nstatic void Usage(int, char *argv[]) {\\n  fprintf(stderr, \"%s [--help] [-repeat N] filename.\\\n\", argv[0]);\\n  exit(1);\\n}\\n\\nint main(int argc, char *argv[]) {\\n  int nRet = 0;\\n  void *buf = NULL;\\n  int nLen = 0;\\n  int nLoops = 1;\\n  const char *pszFilename = NULL;\\n\\n  for (int i = 1; i < argc; i++) {\\n    if (i + 1 < argc && strcmp(argv[i], \"-repeat\") == 0) {\\n      nLoops = atoi(argv[i + 1]);\\n      i++;\\n    } else if (strcmp(argv[i], \"-dummy\") == 0) {\\n      uint8_t dummy = ' ';\\n      return LLVMFuzzerTestOneInput(&dummy, 1);\\n    } else if (strcmp(argv[i], \"--help\") == 0) {\\n      Usage(argc, argv);\\n    } else if (argv[i][0] == '-') {\\n      fprintf(stderr, \"Unrecognized option: %s\", argv[i]);\\n      Usage(argc, argv);\\n    } else {\\n      pszFilename = argv[i];\\n    }\\n  }\\n  if (pszFilename == nullptr) {\\n    fprintf(stderr, \"No filename specified\\\n\");\\n    Usage(argc, argv);\\n  }\\n  FILE *f = fopen(pszFilename, \"rb\");\\n  if (!f) {\\n    fprintf(stderr, \"%s does not exist.\\\n\", pszFilename);\\n    exit(1);\\n  }\\n  fseek(f, 0, SEEK_END);\\n  nLen = (int)ftell(f);\\n  fseek(f, 0, SEEK_SET);\\n  buf = malloc(nLen);\\n  if (!buf) {\\n    fprintf(stderr, \"malloc failed.\\\n\");\\n    fclose(f);\\n    exit(1);\\n  }\\n  CPL_IGNORE_RET_VAL(fread(buf, nLen, 1, f));\\n  fclose(f);\\n  for (int i = 0; i < nLoops; i++) {\\n    nRet = LLVMFuzzerTestOneInput(static_cast<const uint8_t *>(buf), nLen);\\n    if (nRet != 0)\\n      break;\\n  }\\n  free(buf);\\n  return nRet;\\n}\\n\\n#endif",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tiffsetsubdirectory",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_COV_INCREASE",
+        "bug": "False",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <cstdint>\\n#include <cstdlib>\\n#include <sstream>\\n#include <cstring>\\n#include <cstdio>\\n#include <cstdarg>\\n\\nextern \"C\" void handle_error(const char *unused, const char *unused2, va_list unused3) { return; }\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n  // Set custom error handlers to suppress error messages\\n  TIFFSetErrorHandler(handle_error);\\n  TIFFSetWarningHandler(handle_error);\\n\\n  // Create a FuzzedDataProvider instance to extract data\\n  FuzzedDataProvider provider(data, size);\\n\\n  // Extract a uint64_t value for the subdirectory offset\\n  uint64_t subdir_offset = provider.ConsumeIntegral<uint64_t>();\\n\\n  // Create a TIFF object from the remaining data\\n  std::istringstream s(std::string(reinterpret_cast<const char*>(provider.ConsumeRemainingBytes<uint8_t>().data()), provider.remaining_bytes()));\\n  TIFF *tif = TIFFClientOpen(\"MemTIFF\", \"r\", static_cast<thandle_t>(&s),\\n                             [](thandle_t handle, tdata_t buf, tsize_t size) -> tsize_t {\\n                               std::istringstream *stream = static_cast<std::istringstream*>(handle);\\n                               stream->read(static_cast<char*>(buf), size);\\n                               return stream->gcount();\\n                             },\\n                             [](thandle_t handle, tdata_t buf, tsize_t size) -> tsize_t {\\n                               // write is not supported for std::istringstream, so return 0\\n                               return 0;\\n                             },\\n                             [](thandle_t handle, toff_t offset, int whence) -> toff_t {\\n                               std::istringstream *stream = static_cast<std::istringstream*>(handle);\\n                               stream->seekg(offset, (whence == SEEK_SET) ? std::ios::beg : (whence == SEEK_CUR) ? std::ios::cur : std::ios::end);\\n                               return stream->tellg();\\n                             },\\n                             [](thandle_t handle) -> int {\\n                               return 0;\\n                             },\\n                             [](thandle_t handle) -> toff_t {\\n                               std::istringstream *stream = static_cast<std::istringstream*>(handle);\\n                               auto current = stream->tellg();\\n                               stream->seekg(0, std::ios::end);\\n                               auto length = stream->tellg();\\n                               stream->seekg(current);\\n                               return length;\\n                             },\\n                             [](thandle_t, tdata_t*, toff_t*) -> int {\\n                               // Memory mapping is not supported for std::istringstream, so return 0\\n                               return 0;\\n                             },\\n                             [](thandle_t, tdata_t, toff_t) -> void {\\n                               // Memory unmapping is not supported for std::istringstream, so do nothing\\n                             });\\n\\n  if (!tif) {\\n    return 0;\\n  }\\n\\n  // Call the function-under-test\\n  int result = TIFFSetSubDirectory(tif, subdir_offset);\\n\\n  // Clean up\\n  TIFFClose(tif);\\n\\n  return 0;\\n}\\n\\n#ifdef STANDALONE\\n\\ntemplate <class T> static void CPL_IGNORE_RET_VAL(T) {}\\n\\nstatic void Usage(int, char *argv[]) {\\n  fprintf(stderr, \"%s [--help] [-repeat N] filename.\\\n\", argv[0]);\\n  exit(1);\\n}\\n\\nint main(int argc, char *argv[]) {\\n  int nRet = 0;\\n  void *buf = NULL;\\n  int nLen = 0;\\n  int nLoops = 1;\\n  const char *pszFilename = NULL;\\n\\n  for (int i = 1; i < argc; i++) {\\n    if (i + 1 < argc && strcmp(argv[i], \"-repeat\") == 0) {\\n      nLoops = atoi(argv[i + 1]);\\n      i++;\\n    } else if (strcmp(argv[i], \"-dummy\") == 0) {\\n      uint8_t dummy = ' ';\\n      return LLVMFuzzerTestOneInput(&dummy, 1);\\n    } else if (strcmp(argv[i], \"--help\") == 0) {\\n      Usage(argc, argv);\\n    } else if (argv[i][0] == '-') {\\n      fprintf(stderr, \"Unrecognized option: %s\", argv[i]);\\n      Usage(argc, argv);\\n    } else {\\n      pszFilename = argv[i];\\n    }\\n  }\\n  if (pszFilename == nullptr) {\\n    fprintf(stderr, \"No filename specified\\\n\");\\n    Usage(argc, argv);\\n  }\\n  FILE *f = fopen(pszFilename, \"rb\");\\n  if (!f) {\\n    fprintf(stderr, \"%s does not exist.\\\n\", pszFilename);\\n    exit(1);\\n  }\\n  fseek(f, 0, SEEK_END);\\n  nLen = (int)ftell(f);\\n  fseek(f, 0, SEEK_SET);\\n  buf = malloc(nLen);\\n  if (!buf) {\\n    fprintf(stderr, \"malloc failed.\\\n\");\\n    fclose(f);\\n    exit(1);\\n  }\\n  CPL_IGNORE_RET_VAL(fread(buf, nLen, 1, f));\\n  fclose(f);\\n  for (int i = 0; i < nLoops; i++) {\\n    nRet = LLVMFuzzerTestOneInput(static_cast<const uint8_t *>(buf), nLen);\\n    if (nRet != 0)\\n      break;\\n  }\\n  free(buf);\\n  return nRet;\\n}\\n\\n#endif",
+        "model": ""
+    }
+
+    ]
+}

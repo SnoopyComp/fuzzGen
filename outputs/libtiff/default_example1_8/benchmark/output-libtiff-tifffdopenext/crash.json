@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tifffdopenext",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n\\n#include <cstddef>\\n#include <cstdint>\\n#include <cstring>\\n#include <fcntl.h>\\n#include <unistd.h>\\n#include <tiffio.h>\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {\\n  FuzzedDataProvider stream(data, size);\\n\\n  // Create a temporary file to pass a file descriptor to TIFFFdOpenExt\\n  char tmp_filename[] = \"/tmp/fuzz_tiff_XXXXXX\";\\n  int fd = mkstemp(tmp_filename);\\n  if (fd == -1) {\\n    return 0;\\n  }\\n\\n  // Write the fuzz data to the temporary file\\n  if (write(fd, data, size) == -1) {\\n    close(fd);\\n    unlink(tmp_filename);\\n    return 0;\\n  }\\n\\n  // Reset the file offset to the beginning\\n  lseek(fd, 0, SEEK_SET);\\n\\n  // Consume strings for mode and name\\n  std::string mode = stream.ConsumeRandomLengthString(10);\\n  std::string name = stream.ConsumeRandomLengthString(20);\\n\\n  // Call the function-under-test\\n  TIFFOpenOptions* opts = TIFFOpenOptionsAlloc();\\n  TIFF* tiff = TIFFFdOpenExt(fd, name.c_str(), mode.c_str(), opts);\\n\\n  // Clean up\\n  if (tiff) {\\n    TIFFClose(tiff);\\n  }\\n  TIFFOpenOptionsFree(opts);\\n  close(fd);\\n  unlink(tmp_filename);\\n\\n  return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tifffdopenext",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "False",
+        "crashes": "False",
+        "crash_reason": "-",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <cstdlib>\\n#include <cstring>\\n#include <unistd.h>\\n#include <vector>\\n#include <string>\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n  FuzzedDataProvider stream(data, size);\\n\\n  // Create a temporary file to use with TIFFFdOpen\\n  char temp_filename[] = \"/tmp/tiff_fuzz_XXXXXX\";\\n  int fd = mkstemp(temp_filename);\\n  if (fd == -1) {\\n    return 0;\\n  }\\n\\n  // Write the fuzzing data to the temporary file\\n  std::vector<uint8_t> file_data = stream.ConsumeBytes<uint8_t>(size);\\n  if (write(fd, file_data.data(), file_data.size()) == -1) {\\n    close(fd);\\n    unlink(temp_filename);\\n    return 0;\\n  }\\n\\n  // Ensure the file is properly flushed and seek to the beginning\\n  fsync(fd);\\n  lseek(fd, 0, SEEK_SET);\\n\\n  // Prepare the parameters for TIFFFdOpen\\n  std::string mode_str = stream.PickValueInArray<std::string>({\"r\", \"r+\"});\\n  const char *mode = mode_str.c_str();\\n\\n  // Call the function-under-test\\n  TIFF *tiff = TIFFFdOpen(fd, temp_filename, mode);\\n\\n  // Perform some operations on the TIFF file to increase coverage\\n  if (tiff != nullptr) {\\n    uint32_t width = 0, height = 0;\\n    uint16_t bits_per_sample = 0, samples_per_pixel = 0;\\n    TIFFGetField(tiff, TIFFTAG_IMAGEWIDTH, &width);\\n    TIFFGetField(tiff, TIFFTAG_IMAGELENGTH, &height);\\n    TIFFGetField(tiff, TIFFTAG_BITSPERSAMPLE, &bits_per_sample);\\n    TIFFGetField(tiff, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel);\\n\\n    // Additional operations to increase coverage\\n    if (width > 0 && height > 0 && bits_per_sample > 0 && samples_per_pixel > 0) {\\n      std::vector<uint8_t> buffer(width * height * samples_per_pixel * (bits_per_sample / 8));\\n      TIFFReadEncodedStrip(tiff, 0, buffer.data(), buffer.size());\\n    }\\n\\n    TIFFClose(tiff);\\n  }\\n\\n  // Clean up\\n  close(fd);\\n  unlink(temp_filename);\\n\\n  return 0;\\n}",
+        "model": ""
+    }
+
+    ]
+}

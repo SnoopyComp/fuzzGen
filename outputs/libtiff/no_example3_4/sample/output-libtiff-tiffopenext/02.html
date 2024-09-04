@@ -1,0 +1,567 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tiffopenext / 02</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Define the TIFFOpenOptions structure
+struct TIFFOpenOptions {
+    int tif_fd;
+    void *tif_clientdata;
+    const char *tif_name;
+    int tif_mode;
+    int tif_flags;
+};
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    if (filename.empty()) {
+        filename = &#34;default.tiff&#34;;  // Ensure filename is not empty
+    }
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+    if (mode.empty()) {
+        mode = &#34;r&#34;;  // Ensure mode is not empty
+    }
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = -1;  // Initialize to -1 to indicate no file descriptor
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = filename.c_str(); // Use the generated filename
+    options.tif_mode = 0; // Initialize mode to 0
+    options.tif_flags = 0; // Initialize flags to 0
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = nullptr; // Set to nullptr for simplicity
+    options.tif_mode = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_flags = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:17:21: error: variable has incomplete type &#39;TIFFOpenOptions&#39;
+   17 |     TIFFOpenOptions options;
+      |                     ^
+/work/include/tiffio.h:501:20: note: forward declaration of &#39;TIFFOpenOptions&#39;
+  501 |     typedef struct TIFFOpenOptions TIFFOpenOptions;
+      |                    ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+#include &lt;string&gt; // Include the string library
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = nullptr; // Set to nullptr for simplicity
+    options.tif_mode = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_flags = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+```
+
+Explanation:
+1. Included the `&lt;string&gt;` library to ensure the use of `std::string` in the code.
+2. The rest of the code remains unchanged as it correctly utilizes the `FuzzedDataProvider` to generate inputs for the function under test and handles the TIFF file appropriately.
+</pre>
+
+
+<h3>Fixer prompt #2</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+#include &lt;string&gt; // Include the string library
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = nullptr; // Set to nullptr for simplicity
+    options.tif_mode = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_flags = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:18:21: error: variable has incomplete type &#39;TIFFOpenOptions&#39;
+   18 |     TIFFOpenOptions options;
+      |                     ^
+/work/include/tiffio.h:501:20: note: forward declaration of &#39;TIFFOpenOptions&#39;
+  501 |     typedef struct TIFFOpenOptions TIFFOpenOptions;
+      |                    ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #2</h3>
+
+<pre>
+To fix the build error, we need to properly define the `TIFFOpenOptions` structure since it is only forward-declared in the `tiffio.h` header file. We will also ensure that the `filename` and `mode` strings are valid for use with `TIFFOpenExt`.
+
+Here is the full corrected code:
+
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+#include &lt;string&gt;
+
+// Define the TIFFOpenOptions structure
+struct TIFFOpenOptions {
+    int tif_fd;
+    void *tif_clientdata;
+    const char *tif_name;
+    int tif_mode;
+    int tif_flags;
+};
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    if (filename.empty()) {
+        filename = &#34;default.tiff&#34;;  // Ensure filename is not empty
+    }
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+    if (mode.empty()) {
+        mode = &#34;r&#34;;  // Ensure mode is not empty
+    }
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = nullptr; // Set to nullptr for simplicity
+    options.tif_mode = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_flags = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+```
+
+In this corrected code:
+1. We define the `TIFFOpenOptions` structure as it appears to be forward-declared but not defined in the `tiffio.h` header.
+2. We ensure that both `filename` and `mode` strings are not empty before passing them to `TIFFOpenExt`. If they are empty, we provide default values.
+3. The rest of the code remains unchanged as it is necessary for the fuzzing process.
+</pre>
+
+
+<h3>Fixer prompt #3</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+#include &lt;string&gt;
+
+// Define the TIFFOpenOptions structure
+struct TIFFOpenOptions {
+    int tif_fd;
+    void *tif_clientdata;
+    const char *tif_name;
+    int tif_mode;
+    int tif_flags;
+};
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    if (filename.empty()) {
+        filename = &#34;default.tiff&#34;;  // Ensure filename is not empty
+    }
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+    if (mode.empty()) {
+        mode = &#34;r&#34;;  // Ensure mode is not empty
+    }
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = nullptr; // Set to nullptr for simplicity
+    options.tif_mode = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+    options.tif_flags = fuzzed_data.ConsumeIntegral&lt;int&gt;();
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: Fuzzing crashed immediately at runtime (ASAN-ERROR: AddressSanitizer: SEGV on unknown address 0x000080000000 (pc 0x000080000000 bp 0x7fff6db22af0 sp 0x7fff6db229b8 T0)), indicating fuzz target code for invoking the function under test is incorrect or unrobust.
+&lt;error&gt;
+Crash stacks:
+Stack 0:
+#0 0x80000000  (&lt;unknown module&gt;)
+#1 0x55a011ab2a00 in TIFFOpenExt /src/libtiff/libtiff/tif_unix.c:253:13
+#2 0x55a011a512a5 in LLVMFuzzerTestOneInput /src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:41:18
+#3 0x55a011903600 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+#4 0x55a011904b01 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:807:3
+#5 0x55a0119050e7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+#6 0x55a0118f36f6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+#7 0x55a01191fc22 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+#8 0x7fb72fc6a082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #3</h3>
+
+<pre>
+To address the runtime issue, we need to ensure that the `TIFFOpenExt` function is called with valid parameters. The crash is likely due to invalid or uninitialized data being passed to the function. We should ensure that the `filename` and `mode` strings are valid and that the `TIFFOpenOptions` structure is correctly initialized. Additionally, we should verify that the `TIFFOpenExt` function is correctly used according to the libtiff documentation.
+
+Here is the corrected code:
+
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;tiffio.hxx&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Define the TIFFOpenOptions structure
+struct TIFFOpenOptions {
+    int tif_fd;
+    void *tif_clientdata;
+    const char *tif_name;
+    int tif_mode;
+    int tif_flags;
+};
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Generate a random file name
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    if (filename.empty()) {
+        filename = &#34;default.tiff&#34;;  // Ensure filename is not empty
+    }
+
+    // Generate a random mode string
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+    if (mode.empty()) {
+        mode = &#34;r&#34;;  // Ensure mode is not empty
+    }
+
+    // Allocate and initialize TIFFOpenOptions
+    TIFFOpenOptions options;
+    options.tif_fd = -1;  // Initialize to -1 to indicate no file descriptor
+    options.tif_clientdata = nullptr; // Set to nullptr for simplicity
+    options.tif_name = filename.c_str(); // Use the generated filename
+    options.tif_mode = 0; // Initialize mode to 0
+    options.tif_flags = 0; // Initialize flags to 0
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid TIFF pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+```
+
+Changes made:
+1. Ensured that `filename` and `mode` are not empty by providing default values if they are.
+2. Initialized `options.tif_fd` to `-1` to indicate no file descriptor.
+3. Set `options.tif_name` to the generated filename.
+4. Initialized `options.tif_mode` and `options.tif_flags` to `0`.
+
+These changes should help avoid passing invalid or uninitialized data to the `TIFFOpenExt` function, thus preventing the immediate crash.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffopenext/fixed_targets/02.cc with gpt-4o, attempt 1.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffopenext/fixed_targets/02.cc with gpt-4o, attempt 2.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffopenext/fixed_targets/02.cc with gpt-4o, attempt 3.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffopenext/fixed_targets/02.cc with gpt-4o in 3 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffopenext/fixed_targets/02.cc with gpt-4o.
+Warning: no crash info in libtiff-tiffopenext-02.
+Result for libtiff-tiffopenext-02: crashes=False, coverage=0.0 (0/26868), coverage diff=0.0 (0/49683)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_4/output-libtiff-tiffopenext/corpora/02.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmp7llttpba/build/out/libtiff-tiffopenext-02:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: tiff_read_rgba_fuzzer_seed_corpus.zip
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+Dictionary: 40 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3952188940
+INFO: Loaded 1 modules   (26868 inline 8-bit counters): 26868 [0x562090d15e78, 0x562090d1c76c), 
+INFO: Loaded 1 PC tables (26868 PCs): 26868 [0x562090d1c770,0x562090d856b0), 
+INFO:     6502 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 16832 bytes
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+[1m[31m==13==ERROR: AddressSanitizer: SEGV on unknown address 0x0000ffffffff (pc 0x0000ffffffff bp 0x7ffcea53f770 sp 0x7ffcea53f638 T0)
+[1m[0m==13==The signal is caused by a READ memory access.
+==13==Hint: PC is at a non-executable region. Maybe a wild jump?
+SCARINESS: 60 (wild-jump)
+bash: line 1:    13 Segmentation fault      (core dumped) /out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+
+</pre>
+
+
+</body>

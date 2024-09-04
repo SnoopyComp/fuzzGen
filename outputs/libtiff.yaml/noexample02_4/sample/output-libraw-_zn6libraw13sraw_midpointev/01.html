@@ -1,0 +1,609 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libraw-_zn6libraw13sraw_midpointev / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34;  // Correct header file for LibRaw
+#include &lt;unistd.h&gt;  // For write and close functions
+#include &lt;cstdio&gt;    // For remove function
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to hold the input data
+    char temp_filename[] = &#34;/tmp/libraw_fuzz_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;  // Return early if file creation fails
+    }
+
+    // Write the fuzzed data to the temporary file
+    write(fd, data, size);
+    close(fd);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Open the temporary file with the LibRaw instance
+    if (libraw_instance.open_file(temp_filename) != LIBRAW_SUCCESS) {
+        // Clean up the temporary file
+        remove(temp_filename);
+        return 0;  // Return early if file opening fails
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up the temporary file
+    remove(temp_filename);
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;libraw.h&#34;  // Assuming this is the correct header file for LibRaw
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: No code coverage increasement, indicating the fuzz target ineffectively invokes the function under test.
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+Certainly! To address the issue of no code coverage increase, we need to ensure that the function `libraw_instance.sraw_midpoint()` is being invoked with meaningful data. One way to do this is to use the `FuzzedDataProvider` to generate valid inputs for the `LibRaw` instance.
+
+In this case, we will:
+1. Use the `FuzzedDataProvider` to generate a valid input file that `LibRaw` can process.
+2. Ensure that the input data is correctly passed to the `LibRaw` instance.
+
+Here&#39;s the updated code:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;libraw/libraw.h&gt;  // Correct header file for LibRaw
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to hold the input data
+    char temp_filename[] = &#34;/tmp/libraw_fuzz_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;  // Return early if file creation fails
+    }
+
+    // Write the fuzzed data to the temporary file
+    write(fd, data, size);
+    close(fd);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Open the temporary file with the LibRaw instance
+    if (libraw_instance.open_file(temp_filename) != LIBRAW_SUCCESS) {
+        // Clean up the temporary file
+        remove(temp_filename);
+        return 0;  // Return early if file opening fails
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up the temporary file
+    remove(temp_filename);
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+```
+
+### Explanation:
+1. **Include the Correct Header File**: Ensure the correct header for `LibRaw` is included.
+2. **Temporary File Creation**: Create a temporary file to hold the fuzzed data. This is necessary because `LibRaw` operates on files.
+3. **Write Data to File**: Write the fuzzed data to the temporary file.
+4. **Open File with LibRaw**: Use the `LibRaw::open_file` method to load the file.
+5. **Call the Function-Under-Test**: Invoke `libraw_instance.sraw_midpoint()`.
+6. **Cleanup**: Remove the temporary file after processing.
+
+This approach ensures that the `LibRaw` instance is working with actual data, which should lead to meaningful code coverage during fuzzing.
+</pre>
+
+
+<h3>Fixer prompt #2</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;libraw/libraw.h&gt;  // Correct header file for LibRaw
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to hold the input data
+    char temp_filename[] = &#34;/tmp/libraw_fuzz_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;  // Return early if file creation fails
+    }
+
+    // Write the fuzzed data to the temporary file
+    write(fd, data, size);
+    close(fd);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Open the temporary file with the LibRaw instance
+    if (libraw_instance.open_file(temp_filename) != LIBRAW_SUCCESS) {
+        // Clean up the temporary file
+        remove(temp_filename);
+        return 0;  // Return early if file opening fails
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up the temporary file
+    remove(temp_filename);
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libraw_fuzzer.cc:2:10: fatal error: &#39;libraw/libraw.h&#39; file not found
+    2 | #include &lt;libraw/libraw.h&gt;  // Correct header file for LibRaw
+      |          ^~~~~~~~~~~~~~~~~
+&lt;/error&gt;
+
+
+Below are instructions to assist you in fixing the error.
+&lt;instruction&gt;
+IMPORTANT: DO NOT include the header file libraw/libraw.h in the generated fuzz target again, the file does not exist in the project-under-test.
+Replace the non-existent &lt;filepath&gt;libraw/libraw.h&lt;/filepath&gt; with the following statement, which share the same file name but exists under the correct path in the project-under-test:
+&lt;code&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34;
+&lt;/code&gt;
+
+&lt;/instruction&gt;
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #2</h3>
+
+<pre>
+Sure, here is the corrected code with the appropriate header file included:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34;  // Correct header file for LibRaw
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to hold the input data
+    char temp_filename[] = &#34;/tmp/libraw_fuzz_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;  // Return early if file creation fails
+    }
+
+    // Write the fuzzed data to the temporary file
+    write(fd, data, size);
+    close(fd);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Open the temporary file with the LibRaw instance
+    if (libraw_instance.open_file(temp_filename) != LIBRAW_SUCCESS) {
+        // Clean up the temporary file
+        remove(temp_filename);
+        return 0;  // Return early if file opening fails
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up the temporary file
+    remove(temp_filename);
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+```
+
+This code should now compile correctly, as it includes the correct header file path for `libraw.h`.
+</pre>
+
+
+<h3>Fixer prompt #3</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34;  // Correct header file for LibRaw
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to hold the input data
+    char temp_filename[] = &#34;/tmp/libraw_fuzz_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;  // Return early if file creation fails
+    }
+
+    // Write the fuzzed data to the temporary file
+    write(fd, data, size);
+    close(fd);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Open the temporary file with the LibRaw instance
+    if (libraw_instance.open_file(temp_filename) != LIBRAW_SUCCESS) {
+        // Clean up the temporary file
+        remove(temp_filename);
+        return 0;  // Return early if file opening fails
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up the temporary file
+    remove(temp_filename);
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libraw_fuzzer.cc:16:5: error: use of undeclared identifier &#39;write&#39;; did you mean &#39;_IO_cookie_io_functions_t::write&#39;?
+   16 |     write(fd, data, size);
+      |     ^~~~~
+      |     _IO_cookie_io_functions_t::write
+/usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h:58:28: note: &#39;_IO_cookie_io_functions_t::write&#39; declared here
+   58 |   cookie_write_function_t *write;       /* Write bytes.  */
+      |                            ^
+/src/libraw_fuzzer.cc:16:5: error: invalid use of non-static data member &#39;write&#39;
+   16 |     write(fd, data, size);
+      |     ^~~~~
+/src/libraw_fuzzer.cc:17:5: error: use of undeclared identifier &#39;close&#39;
+   17 |     close(fd);
+      |     ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #3</h3>
+
+<pre>
+Sure, let&#39;s fix the code by including the necessary headers for the `write` and `close` functions, which are part of the POSIX standard library. We need to include `&lt;unistd.h&gt;` for these functions. Here&#39;s the full corrected code:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34;  // Correct header file for LibRaw
+#include &lt;unistd.h&gt;  // For write and close functions
+#include &lt;cstdio&gt;    // For remove function
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to hold the input data
+    char temp_filename[] = &#34;/tmp/libraw_fuzz_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;  // Return early if file creation fails
+    }
+
+    // Write the fuzzed data to the temporary file
+    write(fd, data, size);
+    close(fd);
+
+    // Create an instance of the LibRaw class
+    LibRaw libraw_instance;
+
+    // Open the temporary file with the LibRaw instance
+    if (libraw_instance.open_file(temp_filename) != LIBRAW_SUCCESS) {
+        // Clean up the temporary file
+        remove(temp_filename);
+        return 0;  // Return early if file opening fails
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up the temporary file
+    remove(temp_filename);
+
+    // Return 0 to indicate successful execution
+    return 0;
+}
+```
+
+By including `&lt;unistd.h&gt;`, we resolve the undeclared identifier errors for `write` and `close`. Additionally, including `&lt;cstdio&gt;` ensures that the `remove` function is properly declared. This should allow the code to build and run correctly for fuzzing.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample02_4/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o, attempt 1.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample02_4/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o, attempt 2.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample02_4/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o, attempt 3.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample02_4/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o in 3 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample02_4/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o.
+Warning: no crash info in libraw-zn6libraw13sraw_midpointev-01.
+Result for libraw-zn6libraw13sraw_midpointev-01: crashes=False, coverage=0.041357430173927824 (730/17651), coverage diff=0.0017597530931044753 (65/36937)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample02_4/output-libraw-_zn6libraw13sraw_midpointev/corpora/01.cc:/tmp/libraw_cr2_fuzzer_corpus -v /tmp/tmpp1rfa798/build/out/libraw-zn6libraw13sraw_midpointev-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer libraw_cr2_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/libraw_cr2_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: libraw_cr2_fuzzer_seed_corpus.zip
+/out/libraw_cr2_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/libraw_cr2_fuzzer_corpus &lt; /dev/null
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2699907704
+INFO: Loaded 1 modules   (17651 inline 8-bit counters): 17651 [0x55d9bb139388, 0x55d9bb13d87b), 
+INFO: Loaded 1 PC tables (17651 PCs): 17651 [0x55d9bb13d880,0x55d9bb1827b0), 
+INFO:        3 files found in /tmp/libraw_cr2_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 1048576 bytes
+INFO: seed corpus: files: 3 min: 6884212b max: 12304199b total: 27614165b rss: 33Mb
+#5	INITED cov: 667 ft: 723 corp: 3/3072Kb exec/s: 0 rss: 50Mb
+#11	REDUCE cov: 667 ft: 723 corp: 3/2853Kb lim: 1048576 exec/s: 0 rss: 50Mb L: 824895/1048576 MS: 1 EraseBytes-
+#15	REDUCE cov: 667 ft: 723 corp: 3/2831Kb lim: 1048576 exec/s: 0 rss: 51Mb L: 1026040/1048576 MS: 4 ChangeBit-CrossOver-ChangeByte-EraseBytes-
+#17	NEW    cov: 676 ft: 755 corp: 4/3855Kb lim: 1048576 exec/s: 0 rss: 52Mb L: 1048576/1048576 MS: 2 CrossOver-CopyPart-
+#19	NEW    cov: 677 ft: 764 corp: 5/4304Kb lim: 1048576 exec/s: 0 rss: 53Mb L: 459287/1048576 MS: 2 ChangeBit-CrossOver-
+#21	NEW    cov: 677 ft: 821 corp: 6/5328Kb lim: 1048576 exec/s: 0 rss: 54Mb L: 1048576/1048576 MS: 2 ChangeBit-CopyPart-
+#27	REDUCE cov: 678 ft: 822 corp: 7/6133Kb lim: 1048576 exec/s: 0 rss: 55Mb L: 824895/1048576 MS: 1 CopyPart-
+#43	REDUCE cov: 678 ft: 822 corp: 7/5748Kb lim: 1048576 exec/s: 0 rss: 55Mb L: 654149/1048576 MS: 1 CrossOver-
+#45	REDUCE cov: 678 ft: 822 corp: 7/5063Kb lim: 1048576 exec/s: 0 rss: 55Mb L: 324344/1048576 MS: 2 ChangeBit-CrossOver-
+#69	NEW    cov: 678 ft: 826 corp: 8/5112Kb lim: 1048576 exec/s: 0 rss: 55Mb L: 50225/1048576 MS: 4 ChangeBit-CrossOver-ChangeBit-CrossOver-
+#70	NEW    cov: 684 ft: 875 corp: 9/5287Kb lim: 1048576 exec/s: 0 rss: 55Mb L: 179963/1048576 MS: 1 CrossOver-
+#74	NEW    cov: 686 ft: 878 corp: 10/6093Kb lim: 1048576 exec/s: 0 rss: 55Mb L: 824899/1048576 MS: 4 ChangeBit-ChangeByte-ChangeASCIIInt-CMP- DE: &#34;\001\000\003\347&#34;-
+#75	REDUCE cov: 686 ft: 878 corp: 10/6061Kb lim: 1048576 exec/s: 0 rss: 56Mb L: 292014/1048576 MS: 1 EraseBytes-
+#78	REDUCE cov: 686 ft: 878 corp: 10/5981Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 966428/1048576 MS: 3 ChangeASCIIInt-CopyPart-EraseBytes-
+#86	NEW    cov: 687 ft: 880 corp: 11/6440Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 469925/1048576 MS: 3 InsertRepeatedBytes-ChangeBit-CrossOver-
+#88	REDUCE cov: 687 ft: 880 corp: 11/6278Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 659059/1048576 MS: 2 InsertRepeatedBytes-EraseBytes-
+#114	REDUCE cov: 687 ft: 880 corp: 11/5969Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 342007/1048576 MS: 1 EraseBytes-
+#115	REDUCE cov: 687 ft: 880 corp: 11/5873Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 244030/1048576 MS: 1 EraseBytes-
+#126	REDUCE cov: 687 ft: 880 corp: 11/5830Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 247943/1048576 MS: 1 EraseBytes-
+#132	REDUCE cov: 687 ft: 880 corp: 11/5824Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 44491/1048576 MS: 1 EraseBytes-
+#134	REDUCE cov: 687 ft: 880 corp: 11/5706Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 704115/1048576 MS: 2 CrossOver-CrossOver-
+#136	REDUCE cov: 687 ft: 880 corp: 11/5393Kb lim: 1048576 exec/s: 0 rss: 57Mb L: 645516/1048576 MS: 2 CrossOver-EraseBytes-
+#138	REDUCE cov: 689 ft: 895 corp: 12/6201Kb lim: 1048576 exec/s: 0 rss: 58Mb L: 827388/1048576 MS: 2 ShuffleBytes-CrossOver-
+#142	REDUCE cov: 689 ft: 895 corp: 12/6188Kb lim: 1048576 exec/s: 0 rss: 59Mb L: 632261/1048576 MS: 4 InsertRepeatedBytes-CrossOver-InsertByte-EraseBytes-
+#151	NEW    cov: 689 ft: 908 corp: 13/6996Kb lim: 1048576 exec/s: 151 rss: 59Mb L: 827397/1048576 MS: 4 PersAutoDict-ChangeByte-CMP-CopyPart- DE: &#34;\001\000\003\347&#34;-&#34;DEBUG RAW&#34;-
+#167	REDUCE cov: 689 ft: 914 corp: 14/7580Kb lim: 1048576 exec/s: 167 rss: 68Mb L: 597592/1048576 MS: 3 ChangeByte-ChangeByte-EraseBytes-
+#169	NEW    cov: 689 ft: 917 corp: 15/8115Kb lim: 1048576 exec/s: 56 rss: 68Mb L: 548187/1048576 MS: 2 CrossOver-EraseBytes-
+#170	REDUCE cov: 689 ft: 917 corp: 15/7981Kb lim: 1048576 exec/s: 56 rss: 68Mb L: 689877/1048576 MS: 1 EraseBytes-
+#174	REDUCE cov: 689 ft: 917 corp: 15/7871Kb lim: 1048576 exec/s: 58 rss: 68Mb L: 357487/1048576 MS: 4 InsertRepeatedBytes-CopyPart-ChangeBit-EraseBytes-
+#187	REDUCE cov: 689 ft: 917 corp: 15/7771Kb lim: 1048576 exec/s: 62 rss: 68Mb L: 145608/1048576 MS: 3 ChangeBit-CopyPart-EraseBytes-
+#200	REDUCE cov: 689 ft: 917 corp: 15/7725Kb lim: 1048576 exec/s: 66 rss: 68Mb L: 132669/1048576 MS: 3 ShuffleBytes-CrossOver-CrossOver-
+#205	REDUCE cov: 690 ft: 948 corp: 16/8364Kb lim: 1048576 exec/s: 68 rss: 68Mb L: 654161/1048576 MS: 5 CMP-CrossOver-CMP-PersAutoDict-CMP- DE: &#34;\010\000\000\000&#34;-&#34;IIII&#34;-&#34;\001\000\003\347&#34;-&#34;\010\000\000\000&#34;-
+#216	REDUCE cov: 690 ft: 948 corp: 16/8231Kb lim: 1048576 exec/s: 72 rss: 68Mb L: 221764/1048576 MS: 1 EraseBytes-
+#218	REDUCE cov: 690 ft: 948 corp: 16/8117Kb lim: 1048576 exec/s: 72 rss: 68Mb L: 537855/1048576 MS: 2 CMP-EraseBytes- DE: &#34;\001\000\000\000\200\000\001u&#34;-
+#225	REDUCE cov: 695 ft: 983 corp: 17/8159Kb lim: 1048576 exec/s: 75 rss: 68Mb L: 42820/1048576 MS: 2 PersAutoDict-EraseBytes- DE: &#34;DEBUG RAW&#34;-
+#237	NEW    cov: 695 ft: 984 corp: 18/8695Kb lim: 1048576 exec/s: 79 rss: 68Mb L: 548189/1048576 MS: 2 PersAutoDict-CMP- DE: &#34;IIII&#34;-&#34;Ag&#34;-
+#238	NEW    cov: 695 ft: 985 corp: 19/8736Kb lim: 1048576 exec/s: 79 rss: 68Mb L: 42821/1048576 MS: 1 InsertByte-
+#242	NEW    cov: 695 ft: 988 corp: 20/9320Kb lim: 1048576 exec/s: 60 rss: 68Mb L: 597706/1048576 MS: 4 ChangeBinInt-ShuffleBytes-CMP-InsertRepeatedBytes- DE: &#34;\001\000\000\000\000\000\000\000&#34;-
+#256	pulse  cov: 695 ft: 988 corp: 20/9320Kb lim: 1048576 exec/s: 64 rss: 68Mb
+#257	REDUCE cov: 696 ft: 990 corp: 21/10220Kb lim: 1048576 exec/s: 64 rss: 68Mb L: 921355/1048576 MS: 5 CopyPart-CopyPart-ChangeASCIIInt-InsertByte-CMP- DE: &#34;\377\377\377\006&#34;-
+#261	NEW    cov: 696 ft: 992 corp: 22/11090Kb lim: 1048576 exec/s: 43 rss: 68Mb L: 891347/1048576 MS: 4 PersAutoDict-ChangeASCIIInt-ShuffleBytes-CrossOver- DE: &#34;\001\000\000\000\000\000\000\000&#34;-
+#263	NEW    cov: 696 ft: 997 corp: 23/11166Kb lim: 1048576 exec/s: 43 rss: 68Mb L: 77673/1048576 MS: 2 ChangeBinInt-CopyPart-
+#269	NEW    cov: 696 ft: 1014 corp: 24/12107Kb lim: 1048576 exec/s: 38 rss: 68Mb L: 963216/1048576 MS: 1 CopyPart-
+#275	NEW    cov: 696 ft: 1017 corp: 25/12178Kb lim: 1048576 exec/s: 39 rss: 68Mb L: 73114/1048576 MS: 1 EraseBytes-
+#284	NEW    cov: 696 ft: 1018 corp: 26/12254Kb lim: 1048576 exec/s: 40 rss: 68Mb L: 77674/1048576 MS: 4 CMP-ChangeByte-ChangeBinInt-InsertByte- DE: &#34;\000J\360\272\331U\000\000&#34;-
+#285	NEW    cov: 701 ft: 1051 corp: 27/12325Kb lim: 1048576 exec/s: 40 rss: 68Mb L: 73115/1048576 MS: 1 InsertByte-
+#287	NEW    cov: 701 ft: 1052 corp: 28/12909Kb lim: 1048576 exec/s: 35 rss: 68Mb L: 597710/1048576 MS: 2 ChangeBinInt-PersAutoDict- DE: &#34;\001\000\003\347&#34;-
+#289	NEW    cov: 701 ft: 1057 corp: 29/13166Kb lim: 1048576 exec/s: 36 rss: 68Mb L: 263213/1048576 MS: 2 ChangeASCIIInt-CrossOver-
+#296	NEW    cov: 701 ft: 1058 corp: 30/13208Kb lim: 1048576 exec/s: 26 rss: 68Mb L: 42825/1048576 MS: 2 ChangeBinInt-CMP- DE: &#34;S\000\004\000&#34;-
+#298	NEW    cov: 702 ft: 1059 corp: 31/13743Kb lim: 1048576 exec/s: 27 rss: 68Mb L: 548190/1048576 MS: 2 InsertByte-CMP- DE: &#34;KONIC&#34;-
+#305	NEW    cov: 702 ft: 1063 corp: 32/13815Kb lim: 1048576 exec/s: 21 rss: 68Mb L: 73211/1048576 MS: 2 ChangeASCIIInt-InsertRepeatedBytes-
+#312	REDUCE cov: 702 ft: 1063 corp: 32/13568Kb lim: 1048576 exec/s: 22 rss: 68Mb L: 795362/963216 MS: 2 ShuffleBytes-EraseBytes-
+#316	REDUCE cov: 702 ft: 1064 corp: 33/14241Kb lim: 1048576 exec/s: 22 rss: 68Mb L: 689881/963216 MS: 4 ChangeBinInt-ChangeASCIIInt-ChangeBit-PersAutoDict- DE: &#34;\377\377\377\006&#34;-
+#317	NEW    cov: 702 ft: 1070 corp: 34/14271Kb lim: 1048576 exec/s: 22 rss: 68Mb L: 29914/963216 MS: 1 EraseBytes-
+#319	NEW    cov: 703 ft: 1079 corp: 35/15170Kb lim: 1048576 exec/s: 21 rss: 69Mb L: 921360/963216 MS: 2 CopyPart-CMP- DE: &#34;NIKON&#34;-
+#326	REDUCE cov: 703 ft: 1079 corp: 35/15115Kb lim: 1048576 exec/s: 21 rss: 70Mb L: 575544/963216 MS: 2 PersAutoDict-EraseBytes- DE: &#34;Ag&#34;-
+#339	REDUCE cov: 703 ft: 1079 corp: 35/14969Kb lim: 1048576 exec/s: 21 rss: 70Mb L: 310314/963216 MS: 3 ChangeASCIIInt-CMP-EraseBytes- DE: &#34;*\000\000\000&#34;-
+#348	NEW    cov: 703 ft: 1083 corp: 36/15054Kb lim: 1048576 exec/s: 21 rss: 70Mb L: 86513/963216 MS: 4 InsertByte-ShuffleBytes-ChangeBit-CrossOver-
+#354	NEW    cov: 703 ft: 1084 corp: 37/15096Kb lim: 1048576 exec/s: 22 rss: 70Mb L: 42825/963216 MS: 1 CopyPart-
+#360	REDUCE cov: 703 ft: 1085 corp: 38/15527Kb lim: 1048576 exec/s: 21 rss: 70Mb L: 441206/963216 MS: 1 CopyPart-
+#366	NEW    cov: 703 ft: 1086 corp: 39/15978Kb lim: 1048576 exec/s: 20 rss: 70Mb L: 462273/963216 MS: 1 EraseBytes-
+#369	NEW    cov: 703 ft: 1088 corp: 40/16Mb lim: 1048576 exec/s: 19 rss: 70Mb L: 418391/963216 MS: 3 ChangeBinInt-CMP-EraseBytes- DE: &#34;MMMM&#34;-
+#372	NEW    cov: 703 ft: 1090 corp: 41/16Mb lim: 1048576 exec/s: 19 rss: 70Mb L: 56325/963216 MS: 3 ChangeBit-InsertByte-EraseBytes-
+#373	NEW    cov: 703 ft: 1092 corp: 42/16Mb lim: 1048576 exec/s: 19 rss: 71Mb L: 548195/963216 MS: 1 CMP- DE: &#34;\377\377\377\377\377\377\377\017&#34;-
+#377	NEW    cov: 703 ft: 1094 corp: 43/16Mb lim: 1048576 exec/s: 19 rss: 71Mb L: 129489/963216 MS: 4 InsertByte-ChangeByte-ChangeASCIIInt-CrossOver-
+#383	REDUCE cov: 703 ft: 1094 corp: 43/16Mb lim: 1048576 exec/s: 20 rss: 71Mb L: 890218/963216 MS: 1 EraseBytes-
+#386	NEW    cov: 703 ft: 1095 corp: 44/17Mb lim: 1048576 exec/s: 20 rss: 71Mb L: 621402/963216 MS: 3 ChangeBit-InsertByte-CrossOver-
+#387	NEW    cov: 703 ft: 1096 corp: 45/17Mb lim: 1048576 exec/s: 20 rss: 71Mb L: 45336/963216 MS: 1 EraseBytes-
+#388	NEW    cov: 703 ft: 1097 corp: 46/17Mb lim: 1048576 exec/s: 19 rss: 71Mb L: 597781/963216 MS: 1 InsertRepeatedBytes-
+#393	REDUCE cov: 703 ft: 1097 corp: 46/17Mb lim: 1048576 exec/s: 19 rss: 71Mb L: 134162/963216 MS: 5 ChangeASCIIInt-ChangeByte-ShuffleBytes-CopyPart-EraseBytes-
+#401	REDUCE cov: 703 ft: 1097 corp: 46/17Mb lim: 1048576 exec/s: 20 rss: 71Mb L: 67126/963216 MS: 3 InsertRepeatedBytes-PersAutoDict-EraseBytes- DE: &#34;\001\000\003\347&#34;-
+#403	NEW    cov: 705 ft: 1099 corp: 47/18Mb lim: 1048576 exec/s: 20 rss: 71Mb L: 597785/963216 MS: 2 ChangeBit-PersAutoDict- DE: &#34;\001\000\003\347&#34;-
+#415	REDUCE cov: 705 ft: 1099 corp: 47/18Mb lim: 1048576 exec/s: 20 rss: 75Mb L: 352692/963216 MS: 2 CrossOver-EraseBytes-
+#427	NEW    cov: 705 ft: 1101 corp: 48/18Mb lim: 1048576 exec/s: 20 rss: 75Mb L: 633123/963216 MS: 2 PersAutoDict-EraseBytes- DE: &#34;\001\000\000\000\000\000\000\000&#34;-
+#443	REDUCE cov: 730 ft: 1137 corp: 49/19Mb lim: 1048576 exec/s: 20 rss: 75Mb L: 537859/963216 MS: 1 PersAutoDict- DE: &#34;\377\377\377\006&#34;-
+#453	REDUCE cov: 730 ft: 1137 corp: 49/19Mb lim: 1048576 exec/s: 20 rss: 75Mb L: 339422/963216 MS: 5 ChangeASCIIInt-InsertRepeatedBytes-CrossOver-InsertByte-EraseBytes-
+#458	NEW    cov: 730 ft: 1140 corp: 50/19Mb lim: 1048576 exec/s: 19 rss: 75Mb L: 655182/963216 MS: 5 ChangeASCIIInt-EraseBytes-ChangeByte-ChangeBinInt-CrossOver-
+#461	REDUCE cov: 730 ft: 1140 corp: 50/19Mb lim: 1048576 exec/s: 20 rss: 77Mb L: 597960/963216 MS: 3 InsertRepeatedBytes-CrossOver-EraseBytes-
+#468	NEW    cov: 730 ft: 1141 corp: 51/19Mb lim: 1048576 exec/s: 19 rss: 77Mb L: 358493/963216 MS: 2 ChangeBit-EraseBytes-
+#474	NEW    cov: 730 ft: 1142 corp: 52/20Mb lim: 1048576 exec/s: 18 rss: 77Mb L: 418400/963216 MS: 1 CMP- DE: &#34;DEBUG RAW&#34;-
+#495	NEW    cov: 730 ft: 1144 corp: 53/20Mb lim: 1048576 exec/s: 19 rss: 77Mb L: 597270/963216 MS: 1 CrossOver-
+#512	pulse  cov: 730 ft: 1144 corp: 53/20Mb lim: 1048576 exec/s: 17 rss: 77Mb
+#515	DONE   cov: 730 ft: 1144 corp: 53/20Mb lim: 1048576 exec/s: 16 rss: 77Mb
+###### Recommended dictionary. ######
+&#34;\001\000\003\347&#34; # Uses: 15
+&#34;DEBUG RAW&#34; # Uses: 3
+&#34;\010\000\000\000&#34; # Uses: 1
+&#34;IIII&#34; # Uses: 3
+&#34;\001\000\000\000\200\000\001u&#34; # Uses: 2
+&#34;Ag&#34; # Uses: 1
+&#34;\001\000\000\000\000\000\000\000&#34; # Uses: 2
+&#34;\377\377\377\006&#34; # Uses: 4
+&#34;\000J\360\272\331U\000\000&#34; # Uses: 0
+&#34;S\000\004\000&#34; # Uses: 0
+&#34;KONIC&#34; # Uses: 1
+&#34;NIKON&#34; # Uses: 1
+&#34;*\000\000\000&#34; # Uses: 0
+&#34;MMMM&#34; # Uses: 1
+&#34;\377\377\377\377\377\377\377\017&#34; # Uses: 0
+###### End of recommended dictionary. ######
+Done 515 runs in 31 second(s)
+stat::number_of_executed_units: 515
+stat::average_exec_per_sec:     16
+stat::new_units_added:          79
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              77
+
+</pre>
+
+
+</body>

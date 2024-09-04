@@ -1,6 +1,3 @@
-#  $1: 생성할 파일 이름
-#  $2: recursive count
-#  $3: memory format
 #!/bin/bash
 
 if [ -f .env ]; then
@@ -12,6 +9,8 @@ export OPENAI_API_KEY=$OPENAI_API_KEY
 
 
 directory_name=$1
+library_name=libtiff
+
 
 if [ -n "$3" ]; then
 	docker rm $(docker ps -qa)
@@ -24,9 +23,9 @@ fi
 for ((var=1; var<=$2; var++));
 do
 	./run_all_experiments.py\
-		--model='gpt-4o'\
-		-y ./benchmark-sets/all/libraw.yaml\
-		--work-dir=results/${directory_name}$var
+	--model='gpt-4o'\
+	-y ./benchmark-sets/all/${library_name}.yaml\
+	--work-dir=results/${library_name}/${directory_name}$var
 
-	python3.11 -m report.web -r results/${directory_name}$var -o outputs/${directory_name}$var
+	python3.11 -m report.web -r results/${library_name}/${directory_name}$var -o outputs/${library_name}/${directory_name}$var
 done

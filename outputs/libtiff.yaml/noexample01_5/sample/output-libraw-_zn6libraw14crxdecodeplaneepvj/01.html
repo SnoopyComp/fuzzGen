@@ -1,0 +1,968 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libraw-_zn6libraw14crxdecodeplaneepvj / 01</h1>
+Bug: False
+<br>
+Crash reason: FP_NEAR_INIT_CRASH
+<br>
+<br>
+
+
+<h2>Triage</h2>
+<pre>
+Crash is caused by bug in project.
+
+Analysis: The crash is due to a wild address read in the `LibRaw::crxDecodePlane` function. The fuzz driver ensures that the `param1` pointer is not null and provides a valid `uint32_t` value for `param2`. The issue lies within the `crxDecodePlane` function itself, which attempts to read from an invalid memory address, indicating a bug in the project code.
+</pre>
+<br>
+
+
+
+<h3>Triager prompt</h3>
+<pre>
+
+Given the following crash report, fuzz driver code and relevant project function code, analyze the cause of the crash.
+
+First, only answer “Crash is caused by bug in fuzz driver” or “Crash is caused by bug in project”. Second, offer a succinct and to-the-point analysis.
+
+Below is crash report:
+&lt;log&gt;
+AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x5620fb9e5024 bp 0x7ffc90b141f0 sp 0x7ffc90b14100 T0)
+[1m[0m==13==The signal is caused by a READ memory access.
+SCARINESS: 20 (wild-addr-read)
+    #0 0x5620fb9e5024 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+    #1 0x5620fb994e85 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:46:5
+    #2 0x5620fb8475c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+    #3 0x5620fb846de5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+    #4 0x5620fb848d72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+    #5 0x5620fb8490a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+    #6 0x5620fb8376b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+    #7 0x5620fb863be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+    #8 0x7f1d56d60082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+    #9 0x5620fb82882d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+
+DEDUP_TOKEN: LibRaw::crxDecodePlane(void*, unsigned int)--LLVMFuzzerTestOneInput--fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long)
+AddressSanitizer can not provide additional info.
+&lt;/log&gt;
+
+Below is driver code:
+&lt;code&gt;
+Line 1 - 46:
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    // Initialize the buffer to avoid undefined behavior
+    std::memset(remaining_data.data(), 0, remaining_data.size());
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Ensure param1 is not a null pointer
+    if (param1 == nullptr) {
+        return 0;
+    }
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+&lt;/code&gt;
+
+Below is relevant project function code:
+&lt;code&gt;
+No relevant project function code
+&lt;/code&gt;
+
+&lt;solution&gt;
+</pre>
+<br>
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    // Initialize the buffer to avoid undefined behavior
+    std::memset(remaining_data.data(), 0, remaining_data.size());
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Ensure param1 is not a null pointer
+    if (param1 == nullptr) {
+        return 0;
+    }
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: Fuzzing crashed immediately at runtime (ASAN-ERROR: AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x560da8a209c4 bp 0x7ffd0a5e7af0 sp 0x7ffd0a5e7a00 T0)), indicating fuzz target code for invoking the function under test is incorrect or unrobust.
+&lt;error&gt;
+Crash stacks:
+Stack 0:
+#0 0x560da8a209c4 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+#1 0x560da89d0dd5 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:25:5
+#2 0x560da88835c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+#3 0x560da8882de5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+#4 0x560da8884d72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+#5 0x560da88850a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+#6 0x560da88736b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+#7 0x560da889fbe2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+#8 0x7f47cf83d082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+#9 0x560da886482d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+To fix the runtime issue and ensure the fuzzing target code is robust, we need to ensure that the `void*` parameter passed to the `LibRaw::crxDecodePlane` function is not null and is properly allocated. Additionally, we should handle the case where `remaining_data` is empty, which could lead to a segmentation fault.
+
+Here is the complete fixed code:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty
+    if (remaining_data.empty()) {
+        // Allocate at least one byte to avoid null pointer dereference
+        remaining_data.resize(1);
+    }
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+```
+
+In this solution:
+1. We check if `remaining_data` is empty.
+2. If `remaining_data` is empty, we resize it to contain at least one byte. This ensures that `param1` is not a null pointer, preventing a segmentation fault when dereferenced in the `crxDecodePlane` function.
+3. The rest of the code remains unchanged, ensuring that the function under test receives valid input and the fuzzer can continue to operate effectively.
+</pre>
+
+
+<h3>Fixer prompt #2</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty
+    if (remaining_data.empty()) {
+        // Allocate at least one byte to avoid null pointer dereference
+        remaining_data.resize(1);
+    }
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: Fuzzing crashed immediately at runtime (ASAN-ERROR: AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x56116e6e3fc4 bp 0x7ffdca4345b0 sp 0x7ffdca4344c0 T0)), indicating fuzz target code for invoking the function under test is incorrect or unrobust.
+&lt;error&gt;
+Crash stacks:
+Stack 0:
+#0 0x56116e6e3fc4 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+#1 0x56116e693e10 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:32:5
+#2 0x56116e5465c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+#3 0x56116e545de5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+#4 0x56116e547d72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+#5 0x56116e5480a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+#6 0x56116e5366b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+#7 0x56116e562be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+#8 0x7fd3854ad082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+#9 0x56116e52782d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #2</h3>
+
+<pre>
+Here&#39;s the fixed code considering the possible issues and ensuring robust input handling to maximize fuzzing results:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty
+    if (remaining_data.empty()) {
+        // Allocate at least one byte to avoid null pointer dereference
+        remaining_data.resize(1);
+    }
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+```
+
+### Explanation of Fixes:
+1. **Include `&lt;cstring&gt;`**: To ensure we have the necessary functions for memory operations if needed.
+2. **Check for Remaining Bytes**: Before consuming remaining bytes, we check if there are any remaining bytes to avoid potential issues.
+3. **Ensure Non-Empty Data**: If the remaining data is empty, we allocate at least one byte to avoid null pointer dereference.
+
+These changes ensure that the input to `LibRaw::crxDecodePlane` is valid and non-null, which should prevent the immediate crashes observed during fuzzing.
+</pre>
+
+
+<h3>Fixer prompt #3</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty
+    if (remaining_data.empty()) {
+        // Allocate at least one byte to avoid null pointer dereference
+        remaining_data.resize(1);
+    }
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: Fuzzing crashed immediately at runtime (ASAN-ERROR: AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x563250d69fd4 bp 0x7fff1d900870 sp 0x7fff1d900780 T0)), indicating fuzz target code for invoking the function under test is incorrect or unrobust.
+&lt;error&gt;
+Crash stacks:
+Stack 0:
+#0 0x563250d69fd4 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+#1 0x563250d19e06 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:38:5
+#2 0x563250bcc5c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+#3 0x563250bcbde5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+#4 0x563250bcdd72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+#5 0x563250bce0a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+#6 0x563250bbc6b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+#7 0x563250be8be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+#8 0x7fc9f5d5b082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+#9 0x563250bad82d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #3</h3>
+
+<pre>
+Given the runtime error and the stack trace, it appears that the `LibRaw::crxDecodePlane` function is attempting to access memory that it shouldn&#39;t, likely due to the `void*` parameter pointing to invalid or insufficient memory. To fix this, we need to ensure that the `void*` parameter points to a valid memory region of appropriate size.
+
+Here&#39;s the corrected code:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+```
+
+Changes made:
+1. Ensured that the `remaining_data` vector has at least `sizeof(uint32_t)` bytes to avoid potential issues with the `void*` parameter being too small.
+2. This ensures that the `void*` parameter points to a valid memory region that the function can safely access.
+
+This should resolve the immediate runtime issue while maintaining the robustness of the fuzzing harness.
+</pre>
+
+
+<h3>Fixer prompt #4</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: Fuzzing crashed immediately at runtime (ASAN-ERROR: AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x55dc05a48fd4 bp 0x7ffe9505e4b0 sp 0x7ffe9505e3c0 T0)), indicating fuzz target code for invoking the function under test is incorrect or unrobust.
+&lt;error&gt;
+Crash stacks:
+Stack 0:
+#0 0x55dc05a48fd4 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+#1 0x55dc059f8e55 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:38:5
+#2 0x55dc058ab5c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+#3 0x55dc058aade5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+#4 0x55dc058acd72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+#5 0x55dc058ad0a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+#6 0x55dc0589b6b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+#7 0x55dc058c7be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+#8 0x7f5bd6f4b082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+#9 0x55dc0588c82d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #4</h3>
+
+<pre>
+To fix the runtime issue, we need to ensure that the `void*` parameter passed to `LibRaw::crxDecodePlane` is valid and points to a sufficiently large buffer. We should also ensure that the buffer is correctly initialized to avoid any potential segmentation faults.
+
+Here is the full corrected code:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    // Initialize the buffer to avoid undefined behavior
+    std::memset(remaining_data.data(), 0, remaining_data.size());
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+```
+
+### Explanation of Changes:
+1. **Initialization of Buffer**: Added `std::memset(remaining_data.data(), 0, remaining_data.size());` to initialize the buffer to zero. This ensures that the buffer is not filled with random data, which might cause undefined behavior.
+2. **Ensuring Sufficient Buffer Size**: The code already ensures that the buffer is at least `sizeof(uint32_t)` bytes in size. This helps in avoiding null pointer dereference.
+
+These changes should help in preventing the segmentation fault and make the fuzzing process more robust.
+</pre>
+
+
+<h3>Fixer prompt #5</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    // Initialize the buffer to avoid undefined behavior
+    std::memset(remaining_data.data(), 0, remaining_data.size());
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: Fuzzing crashed immediately at runtime (ASAN-ERROR: AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x556d573d9014 bp 0x7ffdd29db7d0 sp 0x7ffdd29db6e0 T0)), indicating fuzz target code for invoking the function under test is incorrect or unrobust.
+&lt;error&gt;
+Crash stacks:
+Stack 0:
+#0 0x556d573d9014 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+#1 0x556d57388e82 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:41:5
+#2 0x556d5723b5c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+#3 0x556d5723ade5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+#4 0x556d5723cd72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+#5 0x556d5723d0a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+#6 0x556d5722b6b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+#7 0x556d57257be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+#8 0x7f2e9eddf082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+#9 0x556d5721c82d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #5</h3>
+
+<pre>
+Here&#39;s the complete code with the necessary fixes applied:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+#include &lt;cstring&gt;  // For std::memcpy
+
+namespace LibRaw {
+    int crxDecodePlane(void *, uint32_t);
+}
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Ensure there is enough data to consume
+    if (size &lt; sizeof(uint32_t)) {
+        return 0;
+    }
+
+    // Consume data for the uint32_t parameter
+    uint32_t param2 = fuzzed_data.ConsumeIntegral&lt;uint32_t&gt;();
+
+    // Ensure there is remaining data for the void* parameter
+    if (fuzzed_data.remaining_bytes() == 0) {
+        return 0;
+    }
+
+    // Consume remaining data for the void* parameter
+    std::vector&lt;uint8_t&gt; remaining_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+
+    // Ensure the remaining data is not empty and has a minimum size
+    if (remaining_data.size() &lt; sizeof(uint32_t)) {
+        // Allocate at least sizeof(uint32_t) bytes to avoid null pointer dereference
+        remaining_data.resize(sizeof(uint32_t));
+    }
+
+    // Initialize the buffer to avoid undefined behavior
+    std::memset(remaining_data.data(), 0, remaining_data.size());
+
+    void *param1 = static_cast&lt;void*&gt;(remaining_data.data());
+
+    // Ensure param1 is not a null pointer
+    if (param1 == nullptr) {
+        return 0;
+    }
+
+    // Call the function-under-test
+    LibRaw::crxDecodePlane(param1, param2);
+
+    return 0;
+}
+```
+
+### Explanation of Fixes:
+1. **Null Pointer Check**: Added a check to ensure `param1` is not a null pointer before calling `LibRaw::crxDecodePlane`. This helps prevent dereferencing a null pointer, which could cause a segmentation fault.
+2. **Initialization and Size Check**: Ensured that the `remaining_data` vector is resized to at least `sizeof(uint32_t)` and initialized with zeros. This avoids potential issues with uninitialized memory.
+
+These changes should make the fuzz harness more robust and prevent the immediate runtime crash.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o, attempt 1.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o, attempt 2.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o, attempt 3.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o, attempt 4.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o, attempt 5.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o in 5 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/fixed_targets/01.cc with gpt-4o.
+Warning: Failed to fix semantic error FP_NEAR_INIT_CRASH in libraw-zn6libraw14crxdecodeplaneepvj-01.
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff.yaml/noexample01_5/output-libraw-_zn6libraw14crxdecodeplaneepvj/corpora/01.cc:/tmp/libraw_cr2_fuzzer_corpus -v /tmp/tmpioz06rnl/build/out/libraw-zn6libraw14crxdecodeplaneepvj-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer libraw_cr2_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/libraw_cr2_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: libraw_cr2_fuzzer_seed_corpus.zip
+/out/libraw_cr2_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/libraw_cr2_fuzzer_corpus &lt; /dev/null
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 4205657062
+INFO: Loaded 1 modules   (17675 inline 8-bit counters): 17675 [0x5620fbc5f388, 0x5620fbc63893), 
+INFO: Loaded 1 PC tables (17675 PCs): 17675 [0x5620fbc63898,0x5620fbca8948), 
+INFO:        3 files found in /tmp/libraw_cr2_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 1048576 bytes
+INFO: seed corpus: files: 3 min: 6884212b max: 12304199b total: 27614165b rss: 32Mb
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+[1m[31m==13==ERROR: AddressSanitizer: SEGV on unknown address 0x0000491e6295 (pc 0x5620fb9e5024 bp 0x7ffc90b141f0 sp 0x7ffc90b14100 T0)
+[1m[0m==13==The signal is caused by a READ memory access.
+SCARINESS: 20 (wild-addr-read)
+    #0 0x5620fb9e5024 in LibRaw::crxDecodePlane(void*, unsigned int) /src/libraw/src/decoders/crx.cpp:1895:34
+    #1 0x5620fb994e85 in LLVMFuzzerTestOneInput /src/libraw_fuzzer.cc:46:5
+    #2 0x5620fb8475c0 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:614:13
+    #3 0x5620fb846de5 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:516:7
+    #4 0x5620fb848d72 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:829:7
+    #5 0x5620fb8490a7 in fuzzer::Fuzzer::Loop(std::__Fuzzer::vector&lt;fuzzer::SizedFile, std::__Fuzzer::allocator&lt;fuzzer::SizedFile&gt;&gt;&amp;) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerLoop.cpp:867:3
+    #6 0x5620fb8376b6 in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerDriver.cpp:914:6
+    #7 0x5620fb863be2 in main /src/llvm-project/compiler-rt/lib/fuzzer/FuzzerMain.cpp:20:10
+    #8 0x7f1d56d60082 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x24082) (BuildId: 0702430aef5fa3dda43986563e9ffcc47efbd75e)
+    #9 0x5620fb82882d in _start (/out/libraw_cr2_fuzzer+0xd782d)
+
+DEDUP_TOKEN: LibRaw::crxDecodePlane(void*, unsigned int)--LLVMFuzzerTestOneInput--fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long)
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /src/libraw/src/decoders/crx.cpp:1895:34 in LibRaw::crxDecodePlane(void*, unsigned int)
+==13==ABORTING
+MS: 0 ; base unit: 0000000000000000000000000000000000000000
+artifact_prefix=&#39;./&#39;; Test unit written to ./crash-356e043f31f7d1eeb25d20e7bd38bf7da8083b98
+stat::number_of_executed_units: 2
+stat::average_exec_per_sec:     0
+stat::new_units_added:          0
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              38
+
+</pre>
+
+
+</body>

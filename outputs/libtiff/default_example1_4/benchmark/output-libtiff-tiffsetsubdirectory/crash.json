@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tiffsetsubdirectory",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "9.14",
+        "coverage_diff": "0.007064790773504016",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <cstdint>\\n#include <cstdlib>\\n#include <sstream>\\n#include <string>\\n#include <vector>\\n\\n// Custom read function for TIFFClientOpen\\ntsize_t readProc(thandle_t fd, tdata_t buf, tsize_t size) {\\n  std::istringstream* stream = static_cast<std::istringstream*>(fd);\\n  stream->read(static_cast<char*>(buf), size);\\n  return stream->gcount();\\n}\\n\\n// Custom write function for TIFFClientOpen (not used, but must be provided)\\ntsize_t writeProc(thandle_t fd, tdata_t buf, tsize_t size) {\\n  return 0;\\n}\\n\\n// Custom seek function for TIFFClientOpen\\ntoff_t seekProc(thandle_t fd, toff_t off, int whence) {\\n  std::istringstream* stream = static_cast<std::istringstream*>(fd);\\n  stream->clear(); // Clear any error flags\\n  stream->seekg(off, (whence == SEEK_SET) ? std::ios::beg : (whence == SEEK_CUR) ? std::ios::cur : std::ios::end);\\n  return stream->tellg();\\n}\\n\\n// Custom close function for TIFFClientOpen\\nint closeProc(thandle_t fd) {\\n  return 0;\\n}\\n\\n// Custom size function for TIFFClientOpen\\ntoff_t sizeProc(thandle_t fd) {\\n  std::istringstream* stream = static_cast<std::istringstream*>(fd);\\n  std::streampos current_pos = stream->tellg();\\n  stream->seekg(0, std::ios::end);\\n  std::streampos end_pos = stream->tellg();\\n  stream->seekg(current_pos, std::ios::beg);\\n  return end_pos;\\n}\\n\\n// Custom map function for TIFFClientOpen (not used, but must be provided)\\nint mapProc(thandle_t fd, tdata_t* pbase, toff_t* psize) {\\n  return 0;\\n}\\n\\n// Custom unmap function for TIFFClientOpen (not used, but must be provided)\\nvoid unmapProc(thandle_t fd, tdata_t base, toff_t size) {\\n}\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n  FuzzedDataProvider stream(data, size);\\n\\n  std::istringstream s(std::string(reinterpret_cast<const char*>(data), size));\\n  TIFF *tif = TIFFClientOpen(\"MemTIFF\", \"r\", &s, readProc, writeProc, seekProc, closeProc, sizeProc, mapProc, unmapProc);\\n  if (!tif) {\\n    return 0;\\n  }\\n\\n  uint64_t subdir_offset = stream.ConsumeIntegral<uint64_t>();\\n\\n  // Call the function-under-test\\n  TIFFSetSubDirectory(tif, subdir_offset);\\n\\n  TIFFClose(tif);\\n\\n  return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tiffsetsubdirectory",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "9.27",
+        "coverage_diff": "0.00680313185596683",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <fuzzer/FuzzedDataProvider.h>\\n#include <cstdint>\\n#include <cstdlib>\\n#include <cstring>\\n#include <sstream>\\n#include <tiffio.h>\\n#include <tiffio.hxx>\\n#include <cstdio>\\n\\nextern \"C\" void handle_error(const char *module, const char *fmt, va_list ap) {\\n    // Suppress libtiff error messages\\n    return;\\n}\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    TIFFSetErrorHandler(handle_error);\\n    TIFFSetWarningHandler(handle_error);\\n\\n    std::istringstream s(std::string(data, data + size));\\n    TIFF *tif = TIFFStreamOpen(\"MemTIFF\", &s);\\n    if (!tif) {\\n        return 0;\\n    }\\n\\n    FuzzedDataProvider provider(data, size);\\n    uint64_t subdir_offset = provider.ConsumeIntegral<uint64_t>();\\n\\n    // Call the function under test\\n    TIFFSetSubDirectory(tif, subdir_offset);\\n\\n    TIFFClose(tif);\\n    return 0;\\n}\\n\\n#ifdef STANDALONE\\n\\ntemplate <class T> static void CPL_IGNORE_RET_VAL(T) {}\\n\\nstatic void Usage(int, char *argv[]) {\\n    fprintf(stderr, \"%s [--help] [-repeat N] filename.\\\n\", argv[0]);\\n    exit(1);\\n}\\n\\nint main(int argc, char *argv[]) {\\n    int nRet = 0;\\n    void *buf = NULL;\\n    int nLen = 0;\\n    int nLoops = 1;\\n    const char *pszFilename = NULL;\\n\\n    for (int i = 1; i < argc; i++) {\\n        if (i + 1 < argc && strcmp(argv[i], \"-repeat\") == 0) {\\n            nLoops = atoi(argv[i + 1]);\\n            i++;\\n        } else if (strcmp(argv[i], \"-dummy\") == 0) {\\n            uint8_t dummy = ' ';\\n            return LLVMFuzzerTestOneInput(&dummy, 1);\\n        } else if (strcmp(argv[i], \"--help\") == 0) {\\n            Usage(argc, argv);\\n        } else if (argv[i][0] == '-') {\\n            fprintf(stderr, \"Unrecognized option: %s\", argv[i]);\\n            Usage(argc, argv);\\n        } else {\\n            pszFilename = argv[i];\\n        }\\n    }\\n    if (pszFilename == nullptr) {\\n        fprintf(stderr, \"No filename specified\\\n\");\\n        Usage(argc, argv);\\n    }\\n    FILE *f = fopen(pszFilename, \"rb\");\\n    if (!f) {\\n        fprintf(stderr, \"%s does not exist.\\\n\", pszFilename);\\n        exit(1);\\n    }\\n    fseek(f, 0, SEEK_END);\\n    nLen = (int)ftell(f);\\n    fseek(f, 0, SEEK_SET);\\n    buf = malloc(nLen);\\n    if (!buf) {\\n        fprintf(stderr, \"malloc failed.\\\n\");\\n        fclose(f);\\n        exit(1);\\n    }\\n    fread(buf, nLen, 1, f);\\n    fclose(f);\\n    for (int i = 0; i < nLoops; i++) {\\n        nRet = LLVMFuzzerTestOneInput(static_cast<const uint8_t *>(buf), nLen);\\n        if (nRet != 0)\\n            break;\\n    }\\n    free(buf);\\n    return nRet;\\n}\\n\\n#endif",
+        "model": ""
+    }
+
+    ]
+}

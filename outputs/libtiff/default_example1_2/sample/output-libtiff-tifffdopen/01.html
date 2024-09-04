@@ -1,0 +1,608 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tifffdopen / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdio&gt;
+#include &lt;cstring&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider stream(data, size);
+
+    // Create a temporary file
+    char tmp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(tmp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    if (write(fd, data, size) != static_cast&lt;ssize_t&gt;(size)) {
+        close(fd);
+        unlink(tmp_filename);
+        return 0;
+    }
+
+    // Use FuzzedDataProvider to generate mode strings
+    std::string mode1 = stream.ConsumeBytesAsString(10);
+    std::string mode2 = stream.ConsumeBytesAsString(10);
+
+    // Ensure null-terminated strings for mode
+    mode1.push_back(&#39;\0&#39;);
+    mode2.push_back(&#39;\0&#39;);
+
+    // Rewind the file descriptor to the beginning
+    lseek(fd, 0, SEEK_SET);
+
+    // Call the function-under-test
+    TIFF *tif = TIFFFdOpen(fd, tmp_filename, mode1.c_str());
+
+    // Clean up
+    if (tif != nullptr) {
+        TIFFClose(tif);
+    }
+    close(fd);
+    unlink(tmp_filename);
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+&lt;solution&gt;
+
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdio&gt;
+#include &lt;cstring&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider stream(data, size);
+
+    // Create a temporary file
+    char tmp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(tmp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    if (write(fd, data, size) != static_cast&lt;ssize_t&gt;(size)) {
+        close(fd);
+        unlink(tmp_filename);
+        return 0;
+    }
+
+    // Use FuzzedDataProvider to generate mode strings
+    std::string mode1 = stream.ConsumeBytesAsString(10);
+    std::string mode2 = stream.ConsumeBytesAsString(10);
+
+    // Ensure null-terminated strings for mode
+    mode1.push_back(&#39;\0&#39;);
+    mode2.push_back(&#39;\0&#39;);
+
+    // Rewind the file descriptor to the beginning
+    lseek(fd, 0, SEEK_SET);
+
+    // Call the function-under-test
+    TIFF *tif = TIFFFdOpen(fd, tmp_filename, mode1.c_str());
+
+    // Clean up
+    if (tif != nullptr) {
+        TIFFClose(tif);
+    }
+    close(fd);
+    unlink(tmp_filename);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:1:1: error: expected unqualified-id
+    1 | &lt;solution&gt;
+      | ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdio&gt;
+#include &lt;cstring&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider stream(data, size);
+
+    // Create a temporary file
+    char tmp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(tmp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    if (write(fd, data, size) != static_cast&lt;ssize_t&gt;(size)) {
+        close(fd);
+        unlink(tmp_filename);
+        return 0;
+    }
+
+    // Use FuzzedDataProvider to generate mode strings
+    std::string mode1 = stream.ConsumeBytesAsString(10);
+    std::string mode2 = stream.ConsumeBytesAsString(10);
+
+    // Ensure null-terminated strings for mode
+    mode1.push_back(&#39;\0&#39;);
+    mode2.push_back(&#39;\0&#39;);
+
+    // Rewind the file descriptor to the beginning
+    lseek(fd, 0, SEEK_SET);
+
+    // Call the function-under-test
+    TIFF *tif = TIFFFdOpen(fd, tmp_filename, mode1.c_str());
+
+    // Clean up
+    if (tif != nullptr) {
+        TIFFClose(tif);
+    }
+    close(fd);
+    unlink(tmp_filename);
+
+    return 0;
+}
+```
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/default_example1_2/output-libtiff-tifffdopen/fixed_targets/01.cc with gpt-4o, attempt 1.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/default_example1_2/output-libtiff-tifffdopen/fixed_targets/01.cc with gpt-4o in 1 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/default_example1_2/output-libtiff-tifffdopen/fixed_targets/01.cc with gpt-4o.
+Warning: no crash info in libtiff-tifffdopen-01.
+Result for libtiff-tifffdopen-01: crashes=False, coverage=0.0077184085909243446 (207/26819), coverage diff=0.003139907010446229 (156/49683)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/default_example1_2/output-libtiff-tifffdopen/corpora/01.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmp4hqxhxaq/build/out/libtiff-tifffdopen-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: tiff_read_rgba_fuzzer_seed_corpus.zip
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+Dictionary: 40 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 4025917166
+INFO: Loaded 1 modules   (26819 inline 8-bit counters): 26819 [0x556c88bf5e38, 0x556c88bfc6fb), 
+INFO: Loaded 1 PC tables (26819 PCs): 26819 [0x556c88bfc700,0x556c88c65330), 
+INFO:     6502 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 16832 bytes
+TIFFClientOpenExt: &#34;&#34;: Bad mode.
+INFO: seed corpus: files: 6502 min: 1b max: 16832b total: 6363517b rss: 38Mb
+TIFFClientOpenExt: &#34;�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;�I*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;EP8G��&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II+&#34;: Bad mode.
+TIFFClientOpenExt: &#34;MM&#34;: Bad mode.
+TIFFClientOpenExt: &#34;MM&#34;: Bad mode.
+TIFFClientOpenExt: &#34;MM&#34;: Bad mode.
+TIFFClientOpenExt: &#34;MM&#34;: Bad mode.
+TIFFClientOpenExt: &#34;MM&#34;: Bad mode.
+TIFFClientOpenExt: &#34;MM&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mode.
+TIFFClientOpenExt: &#34;II*&#34;: Bad mod
+...truncated...
+1).
+/tmp/fuzz_tiff_O6vOab: Not a TIFF or MDI file, bad magic number 97 (0x61).
+/tmp/fuzz_tiff_PmpkYa: Not a TIFF or MDI file, bad magic number 29537 (0x7361).
+/tmp/fuzz_tiff_cqTxid: Not a TIFF or MDI file, bad magic number 25185 (0x6261).
+/tmp/fuzz_tiff_lezTka: Not a TIFF or MDI file, bad magic number 25185 (0x6261).
+/tmp/fuzz_tiff_MOv1Aa: Not a TIFF or MDI file, bad magic number 25185 (0x6261).
+/tmp/fuzz_tiff_vvTni9: Not a TIFF or MDI file, bad magic number 25185 (0x6261).
+/tmp/fuzz_tiff_kaBc59: Not a TIFF or MDI file, bad magic number 25185 (0x6261).
+/tmp/fuzz_tiff_0nz70a: Not a TIFF or MDI file, bad magic number 28018 (0x6d72).
+/tmp/fuzz_tiff_gh9WIa: Not a TIFF or MDI file, bad magic number 28018 (0x6d72).
+TIFFClientOpenExt: &#34;mrmmmY&#34;: Bad mode.
+TIFFClientOpenExt: &#34;mrmmmY&#34;: Bad mode.
+TIFFClientOpenExt: &#34;mrmmmYmrmm&#34;: Bad mode.
+TIFFClientOpenExt: &#34;hah&#34;: Bad mode.
+TIFFClientOpenExt: &#34;h&#34;: Bad mode.
+TIFFClientOpenExt: &#34;h&#34;: Bad mode.
+TIFFClientOpenExt: &#34;h&#34;: Bad mode.
+TIFFClientOpenExt: &#34;h&#34;: Bad mode.
+/tmp/fuzz_tiff_Jyrg2a: Cannot read TIFF header.
+/tmp/fuzz_tiff_HHl4sa: Cannot read TIFF header.
+/tmp/fuzz_tiff_349ewc: Not a TIFF or MDI file, bad magic number 114 (0x72).
+/tmp/fuzz_tiff_hTvUra: Not a TIFF or MDI file, bad magic number 114 (0x72).
+/tmp/fuzz_tiff_IPclRb: Not a TIFF or MDI file, bad magic number 114 (0x72).
+/tmp/fuzz_tiff_TIlP8c: Not a TIFF or MDI file, bad magic number 17266 (0x4372).
+/tmp/fuzz_tiff_ZtHY4b: Not a TIFF or MDI file, bad magic number 17266 (0x4372).
+/tmp/fuzz_tiff_K0lK2b: Not a TIFF or MDI file, bad magic number 17266 (0x4372).
+/tmp/fuzz_tiff_lqz6sa: Not a TIFF or MDI file, bad magic number 17266 (0x4372).
+/tmp/fuzz_tiff_F93rud: Not a TIFF or MDI file, bad magic number 9586 (0x2572).
+/tmp/fuzz_tiff_BNAkFc: Not a TIFF or MDI file, bad magic number 14433 (0x3861).
+/tmp/fuzz_tiff_s58Fac: Not a TIFF or MDI file, bad magic number 14433 (0x3861).
+/tmp/fuzz_tiff_C979V9: Not a TIFF or MDI file, bad magic number 14433 (0x3861).
+/tmp/fuzz_tiff_Vdunlc: Not a TIFF or MDI file, bad magic number 14433 (0x3861).
+/tmp/fuzz_tiff_ERbjSc: Not a TIFF or MDI file, bad magic number 14433 (0x3861).
+TIFFClientOpenExt: &#34;(8888888&#34;: Bad mode.
+TIFFClientOpenExt: &#34;(8888888&#34;: Bad mode.
+TIFFClientOpenExt: &#34;(8888886&#34;: Bad mode.
+TIFFClientOpenExt: &#34;(8888886r&#34;: Bad mode.
+TIFFClientOpenExt: &#34;(88#88886&#34;: Bad mode.
+TIFFClientOpenExt: &#34;+aCCaCCCCC&#34;: Bad mode.
+TIFFClientOpenExt: &#34;+aCCaMCCC&#34;: Bad mode.
+TIFFClientOpenExt: &#34;+aCCMCCCC&#34;: Bad mode.
+TIFFClientOpenExt: &#34;+afCCMCCC&#34;: Bad mode.
+TIFFClientOpenExt: &#34;+afCCMCCC&#34;: Bad mode.
+/tmp/fuzz_tiff_YFbsTc: Cannot read TIFF header.
+TIFFClientOpenExt: &#34;�O&lt;O�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;�OO&lt;�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;�O�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;ȱ��&#34;: Bad mode.
+/tmp/fuzz_tiff_XkfFv9: Not a TIFF or MDI file, bad magic number 32353 (0x7e61).
+/tmp/fuzz_tiff_k4y3Da: Not a TIFF or MDI file, bad magic number 32353 (0x7e61).
+/tmp/fuzz_tiff_xtNzNb: Not a TIFF or MDI file, bad magic number 26721 (0x6861).
+TIFFClientOpenExt: &#34;ahaMM�h(&#34;: Bad mode.
+TIFFClientOpenExt: &#34;ahaMM�h(&#34;: Bad mode.
+TIFFClientOpenExt: &#34;ahMMa�h(&#34;: Bad mode.
+/tmp/fuzz_tiff_ZmFzVb: Not a TIFF or MDI file, bad magic number 16993 (0x4261).
+/tmp/fuzz_tiff_Iu8Ofd: Not a TIFF or MDI file, bad magic number 16993 (0x4261).
+TIFFClientOpenExt: &#34;1B-B-FB&#34;: Bad mode.
+TIFFClientOpenExt: &#34;1B-B-&#34;: Bad mode.
+TIFFClientOpenExt: &#34;LB-B-&#34;: Bad mode.
+/tmp/fuzz_tiff_jU2Ilb: Cannot read TIFF header.
+/tmp/fuzz_tiff_iObxUa: Not a TIFF or MDI file, bad magic number 48242 (0xbc72).
+/tmp/fuzz_tiff_PvptN9: Not a TIFF or MDI file, bad magic number 48242 (0xbc72).
+/tmp/fuzz_tiff_I4AwSc: Not a TIFF or MDI file, bad magic number 48242 (0xbc72).
+/tmp/fuzz_tiff_pudaWa: Not a TIFF or MDI file, bad magic number 48242 (0xbc72).
+/tmp/fuzz_tiff_ueQYDa: Not a TIFF or MDI file, bad magic number 25441 (0x6361).
+/tmp/fuzz_tiff_09IJka: Not a TIFF or MDI file, bad magic number 25441 (0x6361).
+/tmp/fuzz_tiff_0iX5gc: Not a TIFF or MDI file, bad magic number 25441 (0x6361).
+TIFFClientOpenExt: &#34;[#&#34;: Bad mode.
+TIFFClientOpenExt: &#34;[c#&#34;: Bad mode.
+TIFFClientOpenExt: &#34;c[#&#34;: Bad mode.
+TIFFClientOpenExt: &#34;����������&#34;: Bad mode.
+TIFFClientOpenExt: &#34;L=aL&#34;: Bad mode.
+TIFFClientOpenExt: &#34;L#aL&#34;: Bad mode.
+TIFFClientOpenExt: &#34;]#aL&#34;: Bad mode.
+TIFFClientOpenExt: &#34;]#aD&#34;: Bad mode.
+TIFFClientOpenExt: &#34;-aD&#34;: Bad mode.
+TIFFClientOpenExt: &#34;!-8�&gt;&#34;: Bad mode.
+TIFFClientOpenExt: &#34;!-8�&gt;�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;�&#34;: Bad mode.
+TIFFClientOpenExt: &#34;Cr�M&#34;: Bad mode.
+TIFFClientOpenExt: &#34;Cr&#34;: Bad mode.
+TIFFClientOpenExt: &#34;Cr&#34;: Bad mode.
+/tmp/fuzz_tiff_47flwb: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_47flwb: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_47flwb: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_47flwb: Not a TIFF or MDI file, bad magic number 353 (0x161).
+/tmp/fuzz_tiff_Qtssgb: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_Qtssgb: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_Qtssgb: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_Qtssgb: Not a TIFF or MDI file, bad magic number 353 (0x161).
+/tmp/fuzz_tiff_OJpXH9: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_OJpXH9: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_OJpXH9: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_OJpXH9: Not a TIFF or MDI file, bad magic number 353 (0x161).
+/tmp/fuzz_tiff_8eZzid: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_8eZzid: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_8eZzid: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_8eZzid: Not a TIFF or MDI file, bad magic number 353 (0x161).
+/tmp/fuzz_tiff_e0bxlc: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_e0bxlc: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_e0bxlc: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_e0bxlc: Not a TIFF or MDI file, bad magic number 353 (0x161).
+#79443	DONE   cov: 207 ft: 320 corp: 108/614b lim: 16832 exec/s: 2562 rss: 71Mb
+###### Recommended dictionary. ######
+&#34;\000\000\000\000&#34; # Uses: 149
+&#34;\002M&#34; # Uses: 146
+&#34;\001M&#34; # Uses: 142
+&#34;\001\000\000\000&#34; # Uses: 129
+&#34;\307-&#34; # Uses: 151
+&#34;-\306&#34; # Uses: 144
+&#34;\001\000\001J&#34; # Uses: 109
+&#34;\010\001\000\000&#34; # Uses: 101
+&#34;\010\001&#34; # Uses: 104
+&#34;\032\202&#34; # Uses: 114
+&#34;\000\000\001\003&#34; # Uses: 106
+&#34;\377\377\377\377\377\377\377\377&#34; # Uses: 77
+&#34;\001/&#34; # Uses: 88
+&#34;\000\000\000\000\000\000\000\000&#34; # Uses: 63
+&#34;\377\377\377\377\377\377\377\217&#34; # Uses: 75
+&#34;\025\202&#34; # Uses: 119
+&#34;\376\377\377\354&#34; # Uses: 90
+&#34;\377(&#34; # Uses: 76
+&#34;\215\000\000\000\000\000\000\000&#34; # Uses: 72
+&#34;\001\000\000\000\000\000\000\225&#34; # Uses: 60
+&#34;\025\000\000\000\000\000\000\000&#34; # Uses: 47
+&#34;\273\002\000\000&#34; # Uses: 62
+&#34;\377\377\377\354&#34; # Uses: 73
+&#34;\377\377\377\377~\377\377\377&#34; # Uses: 52
+&#34;\001\000\000\000\000\000\000\203&#34; # Uses: 66
+&#34;\377\377\377\375&#34; # Uses: 67
+###### End of recommended dictionary. ######
+Done 79443 runs in 31 second(s)
+stat::number_of_executed_units: 79443
+stat::average_exec_per_sec:     2562
+stat::new_units_added:          690
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              71
+
+</pre>
+
+
+</body>

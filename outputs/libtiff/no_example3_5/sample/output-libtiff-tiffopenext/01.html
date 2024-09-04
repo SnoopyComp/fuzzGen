@@ -1,0 +1,715 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tiffopenext / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstring&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+
+// Include the header file that defines TIFFOpenOptions
+#include &lt;tiffiop.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume strings for the filename and mode parameters
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Allocate memory for TIFFOpenOptions and initialize it
+    TIFFOpenOptions options;
+    memset(&amp;options, 0, sizeof(TIFFOpenOptions));
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstring&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume strings for the filename and mode parameters
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Allocate memory for TIFFOpenOptions and initialize it
+    TIFFOpenOptions options;
+    memset(&amp;options, 0, sizeof(TIFFOpenOptions));
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:16:21: error: variable has incomplete type &#39;TIFFOpenOptions&#39;
+   16 |     TIFFOpenOptions options;
+      |                     ^
+/work/include/tiffio.h:501:20: note: forward declaration of &#39;TIFFOpenOptions&#39;
+  501 |     typedef struct TIFFOpenOptions TIFFOpenOptions;
+      |                    ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:17:25: error: invalid application of &#39;sizeof&#39; to an incomplete type &#39;TIFFOpenOptions&#39;
+   17 |     memset(&amp;options, 0, sizeof(TIFFOpenOptions));
+      |                         ^     ~~~~~~~~~~~~~~~~~
+/work/include/tiffio.h:501:20: note: forward declaration of &#39;TIFFOpenOptions&#39;
+  501 |     typedef struct TIFFOpenOptions TIFFOpenOptions;
+      |                    ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+To fix the build issues, we need to address the incomplete type &#39;TIFFOpenOptions&#39;. The error indicates that &#39;TIFFOpenOptions&#39; is forward-declared but its definition is not included. We need to include the appropriate header file that defines &#39;TIFFOpenOptions&#39;. 
+
+Additionally, we should verify that &#39;TIFFOpenExt&#39; is the correct function to use and that it is properly declared and defined in the included headers.
+
+Here is the complete, fixed code:
+
+```cpp
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstring&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+
+// Include the header file that defines TIFFOpenOptions
+#include &lt;tiffiop.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume strings for the filename and mode parameters
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Allocate memory for TIFFOpenOptions and initialize it
+    TIFFOpenOptions options;
+    memset(&amp;options, 0, sizeof(TIFFOpenOptions));
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpenExt(filename.c_str(), mode.c_str(), &amp;options);
+
+    // If TIFFOpenExt returns a valid pointer, close it
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+```
+
+Explanation of changes:
+1. Included `&lt;tiffiop.h&gt;` which defines `TIFFOpenOptions`.
+2. Verified that the rest of the code is consistent with the intended usage of the `TIFFOpenExt` function.
+
+This should resolve the build errors related to the incomplete type and allow the fuzz harness to be built successfully.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_5/output-libtiff-tiffopenext/fixed_targets/01.cc with gpt-4o, attempt 1.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_5/output-libtiff-tiffopenext/fixed_targets/01.cc with gpt-4o in 1 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_5/output-libtiff-tiffopenext/fixed_targets/01.cc with gpt-4o.
+Warning: no crash info in libtiff-tiffopenext-01.
+Result for libtiff-tiffopenext-01: crashes=False, coverage=0.00975609756097561 (262/26855), coverage diff=0.0039450113720991085 (196/49683)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/no_example3_5/output-libtiff-tiffopenext/corpora/01.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmpwcexigwe/build/out/libtiff-tiffopenext-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: tiff_read_rgba_fuzzer_seed_corpus.zip
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+Dictionary: 40 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1850720663
+INFO: Loaded 1 modules   (26855 inline 8-bit counters): 26855 [0x55b2a7146df8, 0x55b2a714d6df), 
+INFO: Loaded 1 PC tables (26855 PCs): 26855 [0x55b2a714d6e0,0x55b2a71b6550), 
+INFO:     6502 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 16832 bytes
+TIFFOpen: &#34;&#34;: Bad mode.
+INFO: seed corpus: files: 6502 min: 1b max: 16832b total: 6363517b rss: 38Mb
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;!&#34;: Bad mode.
+TIFFOpen: &#34;�foo.if�&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;�#&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;**********&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R���&#34;: Bad mode.
+TIFFOpen: &#34;���&gt;R�
+...truncated...
+B2LSB..
+�ME: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+TIFFOpen: &#34;*;\&#34;: Bad mode.
+TIFFOpen: &#34;@;\&#34;: Bad mode.
+TIFFOpen: &#34;;\�@;\&#34;: Bad mode.
+TIFFOpen: &#34;;\�@;\�&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: : No such file or directory.
+TIFFOpen: : No such file or directory.
+TIFFOpen: : No such file or directory.
+TIFFOpen: : No such file or directory.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;\&#34;: Bad mode.
+TIFFOpen: &#34;\&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;�	 0&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+#46384	REDUCE cov: 262 ft: 332 corp: 66/5805b lim: 16832 exec/s: 1546 rss: 73Mb L: 126/169 MS: 5 ManualDict-PersAutoDict-ChangeBit-ChangeByte-EraseBytes- DE: &#34;%\001&#34;-&#34;\000\001&#34;-
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDDDD&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDDDD&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDDDD&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;�������1�&#34;: Bad mode.
+TIFFOpen: &#34;�������1�&#34;: Bad mode.
+TIFFOpen: &#34;!wwwuwwrrr&#34;: Bad mode.
+TIFFOpen: &#34;!wwwuwwrrr&#34;: Bad mode.
+TIFFOpen: &#34;�w4ww[ww!w&#34;: Bad mode.
+TIFFOpen: &#34;��&#34;: Bad mode.
+TIFFOpen: &#34;��&#34;: Bad mode.
+TIFFOpen: �ME: No such file or directory.
+TIFFOpen: �ME: No such file or directory.
+TIFFOpen: �ME: No such file or directory.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+#46450	REDUCE cov: 262 ft: 332 corp: 66/5763b lim: 16832 exec/s: 1548 rss: 73Mb L: 127/168 MS: 1 EraseBytes-
+TIFFOpen: &#34;*&#34;: Bad mode.
+TIFFOpen: &#34;*&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+\: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;�wwaabaaaa&#34;: Bad mode.
+TIFFOpen: &#34;�wwaabaaaa&#34;: Bad mode.
+TIFFOpen: &#34;�wwaabaaaa&#34;: Bad mode.
+TIFFOpen: &#34;�wwaabaaaa&#34;: Bad mode.
+TIFFOpen: &#34;4ww[wwwwww&#34;: Bad mode.
+TIFFOpen: &#34;4ww[wwr[r&#34;: Bad mode.
+TIFFOpen: &#34;4ww[wwr[r&#34;: Bad mode.
+TIFFOpen: &#34;\\&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;\+\&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;r�rrrrrr&#34;: Bad mode.
+TIFFOpen: &#34;r�rrrrrr&#34;: Bad mode.
+TIFFOpen: &#34;wwwr�&#34;: Bad mode.
+TIFFOpen: &#34;�&#34;: Bad mode.
+TIFFOpen: &#34;�rrrrrrmr&#34;: Bad mode.
+TIFFOpen: &#34;�rrrrrr�r&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDzDD&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDzDD&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDzDD&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDz&#34;: Bad mode.
+TIFFOpen: &#34;o.&#34;: Bad mode.
+TIFFOpen: &#34;o.&#34;: Bad mode.
+TIFFOpen: &#34;o.&#34;: Bad mode.
+TIFFOpen: &#34;^&#34;: Bad mode.
+TIFFOpen: &#34;^&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;\\\\&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;GGGGGGGGGG&#34;: Bad mode.
+TIFFOpen: &#34;GGGGGGGGGG&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;\(\&#34;: Bad mode.
+TIFFOpen: &#34;DDD\&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;�ww&#34;: Bad mode.
+TIFFOpen: &#34;�6wwrrrrr&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;\&#34;: Bad mode.
+TIFFOpen: &#34;\&#34;: Bad mode.
+TIFFOpen: : No such file or directory.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&gt;&#34;: Bad mode.
+TIFFOpen: : No such file or directory.
+TIFFOpen: : No such file or directory.
+TIFFOpen: &#34;*{�&#34;: Bad mode.
+TIFFOpen: &#34;*{�&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;I*&#34;: Bad mode.
+TIFFOpen: &#34;I*&#34;: Bad mode.
+TIFFOpen: &#34;I�&#34;: Bad mode.
+TIFFOpen: &#34;�Z&#34;: Bad mode.
+TIFFOpen: &#34;�Z&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;vvvvvvvvvv&#34;: Bad mode.
+TIFFOpen: &#34;vvvvvvvvvv&#34;: Bad mode.
+TIFFOpen: &#34;vvvvvvvvvv&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;�MM&#34;: Bad mode.
+TIFFOpen: &#34;�MM&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;DDDDDDDDDD&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+#46638	REDUCE cov: 262 ft: 332 corp: 66/5745b lim: 16832 exec/s: 1554 rss: 73Mb L: 119/168 MS: 3 ChangeBinInt-ChangeByte-EraseBytes-
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;DDDrrr�zwD&#34;: Bad mode.
+TIFFOpen: &#34;DDDrrr�zwD&#34;: Bad mode.
+TIFFOpen: &#34;DDDrrr�zwD&#34;: Bad mode.
+TIFFOpen: &#34;DDDDrrr�zw&#34;: Bad mode.
+TIFFOpen: &#34;DDDDrrr�zw&#34;: Bad mode.
+TIFFOpen: &#34;MOrr&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+TIFFOpen: &#34;����������&#34;: Bad mode.
+#46668	DONE   cov: 262 ft: 332 corp: 66/5745b lim: 16832 exec/s: 1505 rss: 73Mb
+###### Recommended dictionary. ######
+&#34;\377\377&#34; # Uses: 227
+&#34;\377\377\377\377\377\377\377\377&#34; # Uses: 182
+&#34;\000\000&#34; # Uses: 168
+&#34;\000\000\001Z&#34; # Uses: 102
+&#34;L\001&#34; # Uses: 94
+&#34;d\000\000\000\000\000\000\000&#34; # Uses: 77
+&#34;\003\001\000\000&#34; # Uses: 80
+&#34;\377\377\000S&#34; # Uses: 79
+&#34;\000\000\000\000\000\000\000\000&#34; # Uses: 86
+&#34;\000\000\000\355&#34; # Uses: 74
+&#34;\001\000\001Z&#34; # Uses: 67
+&#34;\275\002&#34; # Uses: 39
+&#34;\000\000\377G&#34; # Uses: 25
+&#34;\001\003&#34; # Uses: 24
+&#34;\001\000\000\000\000\000\000}&#34; # Uses: 19
+&#34;\000\000\000\000\000\000\000d&#34; # Uses: 28
+&#34;\003\000\000\000\000\000\000\000&#34; # Uses: 23
+&#34;\377\377\377\377\377\377\377\014&#34; # Uses: 12
+&#34;\000\000\000\000\000\000\000{&#34; # Uses: 0
+###### End of recommended dictionary. ######
+Done 46668 runs in 31 second(s)
+stat::number_of_executed_units: 46668
+stat::average_exec_per_sec:     1505
+stat::new_units_added:          252
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              73
+
+</pre>
+
+
+</body>

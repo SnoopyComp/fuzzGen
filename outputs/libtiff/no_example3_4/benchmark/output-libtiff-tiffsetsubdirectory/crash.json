@@ -1,0 +1,45 @@
+{
+    "samples": [
+
+    {
+        "benchmark": "output-libtiff-tiffsetsubdirectory",
+        "sample": "01",
+        "status": "Done",
+        "compiles": "False",
+        "crashes": "False",
+        "crash_reason": "-",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <vector>\\n#include <algorithm> // For std::copy\\n#include <cstring>   // For std::memcpy\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    if (size < sizeof(uint64_t)) {\\n        return 0; // Not enough data to consume a uint64_t\\n    }\\n\\n    FuzzedDataProvider fuzzed_data(data, size);\\n\\n    // Consume a uint64_t value for the second parameter\\n    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral<uint64_t>();\\n\\n    // Create a memory buffer for the TIFF object\\n    std::vector<uint8_t> tiff_buffer(1024); // Adjust the size as needed\\n    TIFF *tif = TIFFClientOpen(\"dummy\", \"w\", (thandle_t)&tiff_buffer,\\n                               [](thandle_t handle, tdata_t data, tsize_t size) -> tsize_t {\\n                                   std::vector<uint8_t>* buffer = (std::vector<uint8_t>*)handle;\\n                                   buffer->insert(buffer->end(), (uint8_t*)data, (uint8_t*)data + size);\\n                                   return size;\\n                               },\\n                               [](thandle_t handle, tdata_t data, tsize_t size) -> tsize_t {\\n                                   std::vector<uint8_t>* buffer = (std::vector<uint8_t>*)handle;\\n                                   if (buffer->size() < size) {\\n                                       return 0;\\n                                   }\\n                                   std::memcpy(data, buffer->data(), size);\\n                                   buffer->erase(buffer->begin(), buffer->begin() + size);\\n                                   return size;\\n                               },\\n                               [](thandle_t handle, toff_t offset, int whence) -> toff_t {\\n                                   std::vector<uint8_t>* buffer = (std::vector<uint8_t>*)handle;\\n                                   if (whence == SEEK_SET) {\\n                                       return offset;\\n                                   } else if (whence == SEEK_CUR) {\\n                                       return buffer->size() + offset;\\n                                   } else if (whence == SEEK_END) {\\n                                       return buffer->size() + offset;\\n                                   }\\n                                   return -1;\\n                               },\\n                               [](thandle_t) -> int { return 0; },\\n                               [](thandle_t) -> toff_t { return 0; },\\n                               [](thandle_t) -> int { return 0; });\\n\\n    if (!tif) {\\n        return 0;\\n    }\\n\\n    // Call the function-under-test\\n    int result = TIFFSetSubDirectory(tif, subdir_offset);\\n\\n    // Close the TIFF object\\n    TIFFClose(tif);\\n\\n    return 0;\\n}",
+        "model": ""
+    },
+
+    {
+        "benchmark": "output-libtiff-tiffsetsubdirectory",
+        "sample": "02",
+        "status": "Done",
+        "compiles": "True",
+        "crashes": "False",
+        "crash_reason": "NO_SEMANTIC_ERR",
+        "bug": "True",
+        "triage": "-",
+        "coverage": "0.00",
+        "coverage_diff": "0.0",
+        "coverage_report": "#",
+        "stacktrace": "/stacktrace",
+        "target_binary": "/target_binary",
+        "reproducer": "/artifacts",
+        "run_log": "run.log",
+        "source_code": "#include <cstdint>\\n#include <cstddef>\\n#include <fuzzer/FuzzedDataProvider.h>\\n#include <tiffio.h>\\n#include <vector>\\n#include <string>\\n\\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {\\n    // Initialize the fuzzed data provider\\n    FuzzedDataProvider fuzzed_data(data, size);\\n    \\n    // Create a temporary file name\\n    std::string filename = \"/tmp/fuzz_test.tiff\";\\n    \\n    // Open a TIFF file in memory\\n    TIFF* tiff = TIFFOpen(filename.c_str(), \"w\");\\n    if (!tiff) {\\n        return 0;\\n    }\\n    \\n    // Write some minimal required tags to make it a valid TIFF file\\n    uint32_t width = fuzzed_data.ConsumeIntegralInRange<uint32_t>(1, 1000);\\n    uint32_t length = fuzzed_data.ConsumeIntegralInRange<uint32_t>(1, 1000);\\n    uint16_t samples_per_pixel = fuzzed_data.ConsumeIntegralInRange<uint16_t>(1, 4);\\n    uint16_t bits_per_sample = fuzzed_data.ConsumeIntegralInRange<uint16_t>(8, 16);\\n    uint16_t orientation = fuzzed_data.ConsumeIntegralInRange<uint16_t>(ORIENTATION_TOPLEFT, ORIENTATION_BOTRIGHT);\\n    uint16_t planar_config = fuzzed_data.ConsumeIntegralInRange<uint16_t>(PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE);\\n    uint16_t photometric = fuzzed_data.ConsumeIntegralInRange<uint16_t>(PHOTOMETRIC_MINISWHITE, PHOTOMETRIC_RGB);\\n    \\n    TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width);\\n    TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, length);\\n    TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, samples_per_pixel);\\n    TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, bits_per_sample);\\n    TIFFSetField(tiff, TIFFTAG_ORIENTATION, orientation);\\n    TIFFSetField(tiff, TIFFTAG_PLANARCONFIG, planar_config);\\n    TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, photometric);\\n    \\n    // Write pixel data\\n    std::vector<uint8_t> pixel_data = fuzzed_data.ConsumeBytes<uint8_t>(width * length * samples_per_pixel * (bits_per_sample / 8));\\n    if (pixel_data.empty()) {\\n        pixel_data.resize(width * length * samples_per_pixel * (bits_per_sample / 8), 0);\\n    }\\n    TIFFWriteEncodedStrip(tiff, 0, pixel_data.data(), pixel_data.size());\\n    \\n    // Close the TIFF file to flush the data\\n    TIFFClose(tiff);\\n    \\n    // Reopen the TIFF file for reading and writing\\n    tiff = TIFFOpen(filename.c_str(), \"r+\");\\n    if (!tiff) {\\n        return 0;\\n    }\\n    \\n    // Ensure the TIFF file has at least one valid subdirectory\\n    TIFFCreateDirectory(tiff);\\n    TIFFWriteDirectory(tiff);\\n    \\n    // Get the offset of the current directory\\n    uint64_t current_offset = TIFFCurrentDirOffset(tiff);\\n    \\n    // Consume a uint64_t value for the subdirectory offset within a valid range\\n    uint64_t subdir_offset = fuzzed_data.ConsumeIntegralInRange<uint64_t>(0, current_offset);\\n    \\n    // Call the function-under-test\\n    int result = TIFFSetSubDirectory(tiff, subdir_offset);\\n    \\n    // Close the TIFF file\\n    TIFFClose(tiff);\\n    \\n    return 0;\\n}",
+        "model": ""
+    }
+
+    ]
+}
