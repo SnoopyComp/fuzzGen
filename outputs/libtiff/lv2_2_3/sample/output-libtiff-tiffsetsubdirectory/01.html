@@ -1,0 +1,454 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tiffsetsubdirectory / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstdio&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+extern &#34;C&#34; void handle_error(const char *unused, const char *unused2, va_list unused3) { return; }
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Set custom error handlers to suppress output during fuzzing
+    TIFFSetErrorHandler(handle_error);
+    TIFFSetWarningHandler(handle_error);
+
+    if (size &lt; 8) {
+        // Not enough data to consume an integral and do meaningful work
+        return 0;
+    }
+
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to simulate file descriptor operations
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(size);
+    if (write(fd, file_data.data(), file_data.size()) == -1) {
+        close(fd);
+        return 0;
+    }
+
+    // Reset file descriptor to the beginning of the file
+    lseek(fd, 0, SEEK_SET);
+
+    // Open the TIFF file using the file descriptor
+    TIFF* tiff = TIFFFdOpen(fd, &#34;fuzz_tiff&#34;, &#34;r&#34;);
+    if (!tiff) {
+        close(fd);
+        unlink(temp_filename);
+        return 0;
+    }
+
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+
+    // Call the function-under-test
+    TIFFSetSubDirectory(tiff, subdir_offset);
+
+    // Perform any necessary cleanup
+    TIFFClose(tiff);
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+&lt;solution&gt;
+
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstdio&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+extern &#34;C&#34; void handle_error(const char *unused, const char *unused2, va_list unused3) { return; }
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Set custom error handlers to suppress output during fuzzing
+    TIFFSetErrorHandler(handle_error);
+    TIFFSetWarningHandler(handle_error);
+
+    if (size &lt; 8) {
+        // Not enough data to consume an integral and do meaningful work
+        return 0;
+    }
+
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to simulate file descriptor operations
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(size);
+    if (write(fd, file_data.data(), file_data.size()) == -1) {
+        close(fd);
+        return 0;
+    }
+
+    // Reset file descriptor to the beginning of the file
+    lseek(fd, 0, SEEK_SET);
+
+    // Open the TIFF file using the file descriptor
+    TIFF* tiff = TIFFFdOpen(fd, &#34;fuzz_tiff&#34;, &#34;r&#34;);
+    if (!tiff) {
+        close(fd);
+        unlink(temp_filename);
+        return 0;
+    }
+
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+
+    // Call the function-under-test
+    TIFFSetSubDirectory(tiff, subdir_offset);
+
+    // Perform any necessary cleanup
+    TIFFClose(tiff);
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:1:1: error: expected unqualified-id
+    1 | &lt;solution&gt;
+      | ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+Here is the corrected code:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstdio&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+
+extern &#34;C&#34; void handle_error(const char *unused, const char *unused2, va_list unused3) { return; }
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Set custom error handlers to suppress output during fuzzing
+    TIFFSetErrorHandler(handle_error);
+    TIFFSetWarningHandler(handle_error);
+
+    if (size &lt; 8) {
+        // Not enough data to consume an integral and do meaningful work
+        return 0;
+    }
+
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to simulate file descriptor operations
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(size);
+    if (write(fd, file_data.data(), file_data.size()) == -1) {
+        close(fd);
+        return 0;
+    }
+
+    // Reset file descriptor to the beginning of the file
+    lseek(fd, 0, SEEK_SET);
+
+    // Open the TIFF file using the file descriptor
+    TIFF* tiff = TIFFFdOpen(fd, &#34;fuzz_tiff&#34;, &#34;r&#34;);
+    if (!tiff) {
+        close(fd);
+        unlink(temp_filename);
+        return 0;
+    }
+
+    // Consume a uint64_t value for the subdirectory offset
+    uint64_t subdir_offset = fuzzed_data.ConsumeIntegral&lt;uint64_t&gt;();
+
+    // Call the function-under-test
+    TIFFSetSubDirectory(tiff, subdir_offset);
+
+    // Perform any necessary cleanup
+    TIFFClose(tiff);
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
+```
+
+Changes made:
+1. Removed the erroneous `&lt;solution&gt;` tag at the beginning of the code. This was causing the `expected unqualified-id` error.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv2_2_3/output-libtiff-tiffsetsubdirectory/fixed_targets/01.cc with gpt-4o, attempt 1.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv2_2_3/output-libtiff-tiffsetsubdirectory/fixed_targets/01.cc with gpt-4o in 1 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv2_2_3/output-libtiff-tiffsetsubdirectory/fixed_targets/01.cc with gpt-4o.
+Warning: no crash info in libtiff-tiffsetsubdirectory-01.
+Result for libtiff-tiffsetsubdirectory-01: crashes=False, coverage=0.0903033686953285 (2426/26865), coverage diff=0.006058410321437916 (301/49683)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv2_2_3/output-libtiff-tiffsetsubdirectory/corpora/01.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmpt3nikm44/build/out/libtiff-tiffsetsubdirectory-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: tiff_read_rgba_fuzzer_seed_corpus.zip
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+Dictionary: 40 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3315411963
+INFO: Loaded 1 modules   (26865 inline 8-bit counters): 26865 [0x5647a7dfbef8, 0x5647a7e027e9), 
+INFO: Loaded 1 PC tables (26865 PCs): 26865 [0x5647a7e027f0,0x5647a7e6b700), 
+INFO:     6502 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 16832 bytes
+INFO: seed corpus: files: 6502 min: 1b max: 16832b total: 6363517b rss: 39Mb
+#4096	pulse  cov: 2095 ft: 4188 corp: 734/278Kb exec/s: 1365 rss: 65Mb
+#6503	INITED cov: 2388 ft: 5611 corp: 1239/1127Kb exec/s: 1300 rss: 81Mb
+#6506	NEW    cov: 2388 ft: 5612 corp: 1240/1128Kb lim: 16832 exec/s: 1301 rss: 81Mb L: 1915/10832 MS: 3 ChangeBinInt-CrossOver-EraseBytes-
+#6512	NEW    cov: 2389 ft: 5613 corp: 1241/1129Kb lim: 16832 exec/s: 1302 rss: 81Mb L: 256/10832 MS: 1 EraseBytes-
+#6513	NEW    cov: 2389 ft: 5614 corp: 1242/1132Kb lim: 16832 exec/s: 1302 rss: 81Mb L: 3471/10832 MS: 1 CrossOver-
+#6514	NEW    cov: 2390 ft: 5627 corp: 1243/1132Kb lim: 16832 exec/s: 1302 rss: 81Mb L: 323/10832 MS: 1 EraseBytes-
+#6517	NEW    cov: 2391 ft: 5628 corp: 1244/1133Kb lim: 16832 exec/s: 1303 rss: 81Mb L: 393/10832 MS: 3 CMP-CrossOver-InsertByte- DE: &#34;\014\000\000\000&#34;-
+#6538	NEW    cov: 2392 ft: 5629 corp: 1245/1133Kb lim: 16832 exec/s: 1307 rss: 81Mb L: 434/10832 MS: 1 InsertRepeatedBytes-
+#6556	NEW    cov: 2392 ft: 5630 corp: 1246/1134Kb lim: 16832 exec/s: 1311 rss: 81Mb L: 1230/10832 MS: 3 ChangeBit-CrossOver-EraseBytes-
+#6590	NEW    cov: 2392 ft: 5631 corp: 1247/1135Kb lim: 16832 exec/s: 1318 rss: 81Mb L: 429/10832 MS: 4 ShuffleBytes-ShuffleBytes-InsertByte-CopyPart-
+#6624	NEW    cov: 2392 ft: 5633 corp: 1248/1139Kb lim: 16832 exec/s: 1324 rss: 82Mb L: 4254/10832 MS: 4 ChangeBit-ChangeByte-ShuffleBytes-CrossOver-
+#6631	NEW    cov: 2392 ft: 5634 corp: 1249/1139Kb lim: 16832 exec/s: 1326 rss: 82Mb L: 408/10832 MS: 2 ShuffleBytes-CopyPart-
+#6659	REDUCE cov: 2392 ft: 5634 corp: 1249/1139Kb lim: 16832 exec/s: 1331 rss: 82Mb L: 422/10832 MS: 3 PersAutoDict-ShuffleBytes-EraseBytes- DE: &#34;\014\000\000\000&#34;-
+#6730	NEW    cov: 2392 ft: 5636 corp: 1250/1140Kb lim: 16832 exec/s: 1346 rss: 82Mb L: 792/10832 MS: 1 InsertRepeatedBytes-
+#6882	NEW    cov: 2394 ft: 5638 corp: 1251/1140Kb lim: 16832 exec/s: 1376 rss: 82Mb L: 362/10832 MS: 2 ChangeBinInt-CMP- DE: &#34;\266\012&#34;-
+#6911	NEW    cov: 2394 ft: 5639 corp: 1252/1141Kb lim: 16832 exec/s: 1382 rss: 82Mb L: 479/10832 MS: 4 ChangeByte-CopyPart-ChangeByte-ShuffleBytes-
+#6970	NEW    cov: 2394 ft: 5640 corp: 1253/1142Kb lim: 16832 exec/s: 1394 rss: 82Mb L: 1549/10832 MS: 4 ChangeBinInt-PersAutoDict-EraseBytes-InsertRepeatedBytes- DE: &#34;\014\000\000\000&#34;-
+#7054	NEW    cov: 2394 ft: 5642 corp: 1254/1144Kb lim: 16832 exec/s: 1410 rss: 82Mb L: 1552/10832 MS: 4 ManualDict-ChangeASCIIInt-PersAutoDict-CopyPart- DE: &#34;\002\001&#34;-&#34;\266\012&#34;-
+#7077	NEW    cov: 2394 ft: 5644 corp: 1255/1147Kb lim: 16832 exec/s: 1415 rss: 82Mb L: 2826/10832 MS: 3 ShuffleBytes-ShuffleBytes-CopyPart-
+#7118	NEW    cov: 2395 ft: 5645 corp: 1256/1151Kb lim: 16832 exec/s: 1423 rss: 82Mb L: 4106/10832 MS: 1 PersAutoDict- DE: &#34;\002\001&#34;-
+#7264	NEW    cov: 2395 ft: 5648 corp: 1257/1153Kb lim: 16832 exec/s: 1452 rss: 82Mb L: 1912/10832 MS: 1 CrossOver-
+#7342	NEW    cov: 2395 ft: 5651 corp: 1258/1153Kb lim: 16832 exec/s: 1468 rss: 82Mb L: 443/10832 MS: 3 InsertRepeatedBytes-ChangeBit-InsertByte-
+#7366	NEW    cov: 2396 ft: 5652 corp: 1259/1153Kb lim: 16832 exec/s: 1473 rss: 82Mb L: 384/10832 MS: 4 ShuffleBytes-ChangeBinInt-ChangeByte-ChangeBit-
+#7407	NEW    cov: 2396 ft: 5654 corp: 1260/1155Kb lim: 16832 exec/s: 1234 rss: 82Mb L: 1960/10832 MS: 1 CrossOver-
+#7428	NEW    cov: 2396 ft: 5655 corp: 1261/1156Kb lim: 16832 exec/s: 1238 rss: 82Mb L: 669/10832 MS: 1 InsertByte-
+#7633	NEW    cov: 2396 ft: 5656 corp: 1262/1160Kb lim: 16832 exec/s: 1272 rss: 82Mb L: 3944/10832 MS: 5 InsertRepeatedBytes-ChangeByte-CrossOver-InsertRepeatedBytes-ManualDict- DE: &#34;)\001&#34;-
+#7784	REDUCE cov: 2396 ft: 5656 corp: 1262/1159Kb lim: 16832 exec/s: 1297 rss: 82Mb L: 1322/10832 MS: 1 EraseBytes-
+#8012	NEW    cov: 2396 ft: 5668 corp: 1263/1160Kb lim: 16832 exec/s: 1335 rss: 82Mb L: 390/10832 MS: 3 PersAutoDict-ChangeByte-PersAutoDict- DE: &#34;\014\000\000\000&#34;-&#34;\002\001&#34;-
+#8074	NEW    cov: 2396 ft: 5669 corp: 1264/1160Kb lim: 16832 exec/s: 1345 rss: 82Mb L: 412/10832 MS: 2 PersAutoDict-CrossOver- DE: &#34;\014\000\000\000&#34;-
+#8116	REDUCE cov: 2396 ft: 5669 corp: 1264/1160Kb lim: 16832 exec/s: 1352 rss: 82Mb L: 661/10832 MS: 2 CopyPart-EraseBytes-
+#8192	pulse  cov: 2396 ft: 5669 corp: 1264/1160Kb lim: 16832 exec/s: 1365 rss: 82Mb
+#8222	NEW    cov: 2396 ft: 5670 corp: 1265/1162Kb lim: 16832 exec/s: 1370 rss: 82Mb L: 1554/10832 MS: 1 ManualDict- DE: &#34;&gt;\001&#34;-
+#8262	NEW    cov: 2396 ft: 5671 corp: 1266/1164Kb lim: 16832 exec/s: 1377 rss: 82Mb L: 2476/10832 MS: 5 InsertRepeatedBytes-CrossOver-CopyPart-ChangeASCIIInt-CrossOver-
+#8273	NEW    cov: 2399 ft: 5674 corp: 1267/1164Kb lim: 16832 exec/s: 1378 rss: 82Mb L: 446/10832 MS: 1 InsertRepeatedBytes-
+#8593	NEW    cov: 2399 ft: 5676 corp: 1268/1165Kb lim: 16832 exec/s: 1432 rss: 82Mb L: 408/10832 MS: 5 ChangeByte-ChangeBit-PersAutoDict-ChangeBit-ShuffleBytes- DE: &#34;&gt;\001&#34;-
+#8608	REDUCE cov: 2399 ft: 5676 corp: 1268/1163Kb lim: 16832 exec/s: 1434 rss: 82Mb L: 5154/10832 MS: 5 InsertRepeatedBytes-ChangeBinInt-InsertByte-InsertRepeatedBytes-EraseBytes-
+#8628	NEW    cov: 2400 ft: 5677 corp: 1269/1165Kb lim: 16832 exec/s: 1438 rss: 82Mb L: 1596/10832 MS: 5 CrossOver-InsertRepeatedBytes-ChangeBinInt-ChangeBit-CMP- DE: &#34;;\001&#34;-
+#8775	NEW    cov: 2401 ft: 5678 corp: 1270/1165Kb lim: 16832 exec/s: 1462 rss: 82Mb L: 16/10832 MS: 2 ChangeBinInt-CopyPart-
+#8867	REDUCE cov: 2401 ft: 5678 corp: 1270/1165Kb lim: 16832 exec/s: 1477 rss: 82Mb L: 394/10832 MS: 2 ShuffleBytes-EraseBytes-
+#8918	NEW    cov: 2401 ft: 5679 corp: 1271/1165Kb lim: 16832 exec/s: 1486 rss: 82Mb L: 408/10832 MS: 1 ChangeBinInt-
+#9294	NEW    cov: 2402 ft: 5680 corp: 1272/1165Kb lim: 16832 exec/s: 1549 rss: 82Mb L: 391/10832 MS: 1 ShuffleBytes-
+#9884	NEW    cov: 2403 ft: 5681 corp: 1273/1166Kb lim: 16832 exec/s: 1412 rss: 82Mb L: 785/10832 MS: 5 CrossOver-ManualDict-CMP-EraseBytes-ManualDict- DE: &#34;\025\001&#34;-&#34;\001\247&#34;-&#34;\&#34;\001&#34;-
+#10052	NEW    cov: 2403 ft: 5682 corp: 1274/1167Kb lim: 16832 exec/s: 1436 rss: 82Mb L: 663/10832 MS: 3 ChangeASCIIInt-ChangeByte-CrossOver-
+#10364	REDUCE cov: 2403 ft: 5682 corp: 1274/1167Kb lim: 16832 exec/s: 1480 rss: 82Mb L: 400/10832 MS: 2 EraseBytes-CopyPart-
+#10680	NEW    cov: 2403 ft: 5683 corp: 1275/1169Kb lim: 16832 exec/s: 1525 rss: 82Mb L: 1958/10832 MS: 1 EraseBytes-
+#10845	NEW    cov: 2403 ft: 5684 corp: 1276/1170Kb lim: 16832 exec/s: 1549 rss: 82Mb L: 1645/10832 MS: 5 ShuffleBytes-CrossOver-ChangeBit-ChangeASCIIInt-InsertRepeatedBytes-
+#10847	NEW    cov: 2406 ft: 5687 corp: 1277/1171Kb lim: 16832 exec/s: 1549 rss: 82Mb L: 384/10832 MS: 2 ChangeByte-ChangeByte-
+#11399	NEW    cov: 2406 ft: 5688 corp: 1278/1174Kb lim: 16832 exec/s: 1628 rss: 82Mb L: 3447/10832 MS: 2 InsertByte-ManualDict- DE: &#34;\032\001&#34;-
+#11507	NEW    cov: 2406 ft: 5689 corp: 1279/1174Kb lim: 16832 exec/s: 1643 rss: 82Mb L: 414/10832 MS: 3 ChangeByte-ChangeByte-CMP- DE: &#34;\003\000\000\000\000\000\000\000&#34;-
+#
+...truncated...
+832 exec/s: 1557 rss: 85Mb L: 2009/16780 MS: 2 PersAutoDict-EraseBytes- DE: &#34;\001\000\000\000\000\000\000\000&#34;-
+#26614	NEW    cov: 2420 ft: 5783 corp: 1332/1292Kb lim: 16832 exec/s: 1565 rss: 85Mb L: 408/16780 MS: 1 ShuffleBytes-
+#27145	REDUCE cov: 2420 ft: 5783 corp: 1332/1292Kb lim: 16832 exec/s: 1508 rss: 85Mb L: 418/16780 MS: 1 EraseBytes-
+#27271	REDUCE cov: 2420 ft: 5783 corp: 1332/1291Kb lim: 16832 exec/s: 1515 rss: 85Mb L: 1387/16780 MS: 1 EraseBytes-
+#27447	NEW    cov: 2421 ft: 5784 corp: 1333/1292Kb lim: 16832 exec/s: 1524 rss: 85Mb L: 572/16780 MS: 1 CopyPart-
+#27591	REDUCE cov: 2421 ft: 5784 corp: 1333/1288Kb lim: 16832 exec/s: 1532 rss: 85Mb L: 5896/16780 MS: 4 ManualDict-ManualDict-ChangeBinInt-EraseBytes- DE: &#34;\022\001&#34;-&#34;@\001&#34;-
+#27638	NEW    cov: 2421 ft: 5785 corp: 1334/1288Kb lim: 16832 exec/s: 1535 rss: 85Mb L: 445/16780 MS: 2 CopyPart-InsertRepeatedBytes-
+#27949	REDUCE cov: 2421 ft: 5785 corp: 1334/1288Kb lim: 16832 exec/s: 1552 rss: 85Mb L: 907/16780 MS: 1 EraseBytes-
+#28003	REDUCE cov: 2421 ft: 5785 corp: 1334/1288Kb lim: 16832 exec/s: 1555 rss: 85Mb L: 400/16780 MS: 4 ShuffleBytes-ChangeBinInt-PersAutoDict-EraseBytes- DE: &#34;#\001&#34;-
+#28035	NEW    cov: 2421 ft: 5786 corp: 1335/1289Kb lim: 16832 exec/s: 1557 rss: 85Mb L: 409/16780 MS: 2 InsertByte-ChangeBit-
+#28261	NEW    cov: 2421 ft: 5788 corp: 1336/1289Kb lim: 16832 exec/s: 1570 rss: 85Mb L: 814/16780 MS: 1 CrossOver-
+#28425	REDUCE cov: 2421 ft: 5788 corp: 1336/1289Kb lim: 16832 exec/s: 1496 rss: 85Mb L: 1090/16780 MS: 4 ChangeByte-CrossOver-CopyPart-EraseBytes-
+#28471	NEW    cov: 2423 ft: 5790 corp: 1337/1290Kb lim: 16832 exec/s: 1498 rss: 85Mb L: 440/16780 MS: 1 CMP- DE: &#34;\377\377\377\377&#34;-
+#28524	REDUCE cov: 2423 ft: 5790 corp: 1337/1290Kb lim: 16832 exec/s: 1501 rss: 90Mb L: 579/16780 MS: 3 InsertRepeatedBytes-ChangeASCIIInt-EraseBytes-
+#29121	NEW    cov: 2423 ft: 5791 corp: 1338/1291Kb lim: 16832 exec/s: 1532 rss: 90Mb L: 1314/16780 MS: 2 ShuffleBytes-CrossOver-
+#30037	REDUCE cov: 2425 ft: 5793 corp: 1339/1291Kb lim: 16832 exec/s: 1501 rss: 90Mb L: 406/16780 MS: 1 ChangeBinInt-
+#30125	REDUCE cov: 2425 ft: 5793 corp: 1339/1290Kb lim: 16832 exec/s: 1506 rss: 90Mb L: 4871/16780 MS: 3 PersAutoDict-PersAutoDict-EraseBytes- DE: &#34;\003\001&#34;-&#34;\001\000\000\000\000\000\000\272&#34;-
+#30957	REDUCE cov: 2425 ft: 5793 corp: 1339/1290Kb lim: 16832 exec/s: 1474 rss: 90Mb L: 437/16780 MS: 2 ChangeBinInt-EraseBytes-
+#30963	NEW    cov: 2425 ft: 5796 corp: 1340/1291Kb lim: 16832 exec/s: 1474 rss: 90Mb L: 430/16780 MS: 1 ChangeBinInt-
+#31981	REDUCE cov: 2425 ft: 5796 corp: 1340/1290Kb lim: 16832 exec/s: 1453 rss: 90Mb L: 1276/16780 MS: 3 ManualDict-ChangeBinInt-EraseBytes- DE: &#34;\376\000&#34;-
+#32306	REDUCE cov: 2425 ft: 5796 corp: 1340/1290Kb lim: 16832 exec/s: 1468 rss: 90Mb L: 1423/16780 MS: 5 PersAutoDict-ShuffleBytes-ManualDict-CopyPart-EraseBytes- DE: &#34;\035\001&#34;-&#34;MM\000*&#34;-
+#32326	REDUCE cov: 2425 ft: 5796 corp: 1340/1288Kb lim: 16832 exec/s: 1469 rss: 90Mb L: 2568/16780 MS: 5 PersAutoDict-ChangeBit-ShuffleBytes-ChangeBit-EraseBytes- DE: &#34;MM\000*&#34;-
+#32554	REDUCE cov: 2425 ft: 5796 corp: 1340/1288Kb lim: 16832 exec/s: 1415 rss: 90Mb L: 3893/16780 MS: 3 CopyPart-CopyPart-EraseBytes-
+#32768	pulse  cov: 2425 ft: 5796 corp: 1340/1288Kb lim: 16832 exec/s: 1424 rss: 90Mb
+#32801	REDUCE cov: 2425 ft: 5796 corp: 1340/1288Kb lim: 16832 exec/s: 1426 rss: 90Mb L: 412/16780 MS: 2 ChangeByte-EraseBytes-
+#33363	REDUCE cov: 2425 ft: 5796 corp: 1340/1287Kb lim: 16832 exec/s: 1450 rss: 90Mb L: 1162/16780 MS: 2 ChangeASCIIInt-EraseBytes-
+#33889	REDUCE cov: 2425 ft: 5796 corp: 1340/1287Kb lim: 16832 exec/s: 1412 rss: 90Mb L: 444/16780 MS: 1 EraseBytes-
+#33924	REDUCE cov: 2425 ft: 5796 corp: 1340/1286Kb lim: 16832 exec/s: 1413 rss: 90Mb L: 1596/16780 MS: 5 ShuffleBytes-ChangeByte-ChangeBit-CrossOver-EraseBytes-
+#34050	NEW    cov: 2425 ft: 5799 corp: 1341/1287Kb lim: 16832 exec/s: 1418 rss: 90Mb L: 392/16780 MS: 1 InsertByte-
+#34387	REDUCE cov: 2425 ft: 5799 corp: 1341/1286Kb lim: 16832 exec/s: 1432 rss: 90Mb L: 1703/16780 MS: 2 ShuffleBytes-CrossOver-
+#34466	NEW    cov: 2425 ft: 5801 corp: 1342/1287Kb lim: 16832 exec/s: 1378 rss: 90Mb L: 413/16780 MS: 4 CMP-ChangeBinInt-PersAutoDict-InsertByte- DE: &#34;\002\001&#34;-&#34;#\001&#34;-
+#34771	NEW    cov: 2425 ft: 5802 corp: 1343/1288Kb lim: 16832 exec/s: 1390 rss: 90Mb L: 1834/16780 MS: 5 ShuffleBytes-ManualDict-ShuffleBytes-ChangeBit-CopyPart- DE: &#34;-\001&#34;-
+#35081	REDUCE cov: 2425 ft: 5802 corp: 1343/1288Kb lim: 16832 exec/s: 1403 rss: 90Mb L: 384/16780 MS: 5 ManualDict-CopyPart-EraseBytes-ShuffleBytes-InsertRepeatedBytes- DE: &#34;MM\000*&#34;-
+#35713	REDUCE cov: 2425 ft: 5802 corp: 1343/1288Kb lim: 16832 exec/s: 1373 rss: 90Mb L: 410/16780 MS: 2 ChangeBinInt-EraseBytes-
+#35805	NEW    cov: 2425 ft: 5803 corp: 1344/1289Kb lim: 16832 exec/s: 1377 rss: 90Mb L: 488/16780 MS: 2 ChangeASCIIInt-InsertRepeatedBytes-
+#35854	REDUCE cov: 2425 ft: 5803 corp: 1344/1289Kb lim: 16832 exec/s: 1379 rss: 90Mb L: 390/16780 MS: 4 ChangeByte-ChangeBinInt-ShuffleBytes-EraseBytes-
+#36052	REDUCE cov: 2425 ft: 5803 corp: 1344/1288Kb lim: 16832 exec/s: 1386 rss: 90Mb L: 1088/16780 MS: 3 ChangeBinInt-ChangeBinInt-EraseBytes-
+#36059	REDUCE cov: 2425 ft: 5803 corp: 1344/1288Kb lim: 16832 exec/s: 1386 rss: 90Mb L: 197/16780 MS: 2 EraseBytes-InsertByte-
+#36210	REDUCE cov: 2425 ft: 5803 corp: 1344/1288Kb lim: 16832 exec/s: 1341 rss: 90Mb L: 254/16780 MS: 1 EraseBytes-
+#36648	REDUCE cov: 2425 ft: 5803 corp: 1344/1288Kb lim: 16832 exec/s: 1357 rss: 90Mb L: 850/16780 MS: 3 ChangeBinInt-PersAutoDict-EraseBytes- DE: &#34;\034\001&#34;-
+#36780	REDUCE cov: 2425 ft: 5803 corp: 1344/1287Kb lim: 16832 exec/s: 1362 rss: 90Mb L: 1940/16780 MS: 2 ChangeByte-EraseBytes-
+#36816	REDUCE cov: 2425 ft: 5803 corp: 1344/1287Kb lim: 16832 exec/s: 1363 rss: 90Mb L: 1472/16780 MS: 1 EraseBytes-
+#36837	REDUCE cov: 2425 ft: 5803 corp: 1344/1287Kb lim: 16832 exec/s: 1364 rss: 90Mb L: 1871/16780 MS: 1 EraseBytes-
+#36934	NEW    cov: 2425 ft: 5806 corp: 1345/1290Kb lim: 16832 exec/s: 1367 rss: 90Mb L: 3278/16780 MS: 2 InsertRepeatedBytes-InsertByte-
+#37260	REDUCE cov: 2425 ft: 5806 corp: 1345/1290Kb lim: 16832 exec/s: 1330 rss: 90Mb L: 614/16780 MS: 1 EraseBytes-
+#37663	REDUCE cov: 2425 ft: 5806 corp: 1345/1289Kb lim: 16832 exec/s: 1345 rss: 90Mb L: 1272/16780 MS: 3 ChangeByte-ShuffleBytes-EraseBytes-
+#38119	NEW    cov: 2425 ft: 5807 corp: 1346/1290Kb lim: 16832 exec/s: 1361 rss: 90Mb L: 410/16780 MS: 1 PersAutoDict- DE: &#34;\035\001&#34;-
+#38175	NEW    cov: 2425 ft: 5808 corp: 1347/1297Kb lim: 16832 exec/s: 1316 rss: 90Mb L: 6960/16780 MS: 5 ManualDict-ShuffleBytes-ChangeBit-CopyPart-CMP- DE: &#34;&gt;\001&#34;-&#34;\000\000\000\000\000\000\000\000&#34;-
+#38821	REDUCE cov: 2425 ft: 5808 corp: 1347/1296Kb lim: 16832 exec/s: 1294 rss: 90Mb L: 5545/16780 MS: 1 EraseBytes-
+#38832	REDUCE cov: 2425 ft: 5808 corp: 1347/1296Kb lim: 16832 exec/s: 1294 rss: 90Mb L: 416/16780 MS: 1 EraseBytes-
+#38936	NEW    cov: 2426 ft: 5809 corp: 1348/1298Kb lim: 16832 exec/s: 1297 rss: 90Mb L: 2625/16780 MS: 4 ChangeByte-ManualDict-CopyPart-InsertRepeatedBytes- DE: &#34;\006\001&#34;-
+#39468	REDUCE cov: 2426 ft: 5809 corp: 1348/1298Kb lim: 16832 exec/s: 1315 rss: 90Mb L: 247/16780 MS: 2 InsertByte-EraseBytes-
+#39726	NEW    cov: 2426 ft: 5810 corp: 1349/1300Kb lim: 16832 exec/s: 1324 rss: 90Mb L: 2433/16780 MS: 3 ChangeASCIIInt-PersAutoDict-InsertByte- DE: &#34;#\001&#34;-
+#39786	DONE   cov: 2426 ft: 5810 corp: 1349/1300Kb lim: 16832 exec/s: 1283 rss: 90Mb
+###### Recommended dictionary. ######
+&#34;\014\000\000\000&#34; # Uses: 182
+&#34;\266\012&#34; # Uses: 165
+&#34;\001\247&#34; # Uses: 106
+&#34;\003\000\000\000\000\000\000\000&#34; # Uses: 99
+&#34;4\000\000\000&#34; # Uses: 48
+&#34;\001\000\000\000\000\000\000m&#34; # Uses: 63
+&#34;\001\000\000\000\000\000\000\272&#34; # Uses: 44
+&#34;\000\000\000\000\000\000\000\000&#34; # Uses: 36
+&#34;\001\000\000\000\000\000\000\000&#34; # Uses: 37
+&#34;\001\000\000\000\000\000\000\214&#34; # Uses: 37
+&#34;\377\377\377\377&#34; # Uses: 35
+###### End of recommended dictionary. ######
+Done 39786 runs in 31 second(s)
+stat::number_of_executed_units: 39786
+stat::average_exec_per_sec:     1283
+stat::new_units_added:          190
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              90
+
+</pre>
+
+
+</body>
