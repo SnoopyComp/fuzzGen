@@ -1,0 +1,871 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tiffopen / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;cstdio&gt; // For temporary file creation
+#include &lt;unistd.h&gt; // For write and close functions
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Create a temporary file for the filename
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzzed data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+    if (!file_data.empty()) {
+        write(fd, file_data.data(), file_data.size());
+    }
+    close(fd);
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(temp_filename, mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    // Remove the temporary file
+    std::remove(temp_filename);
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+&lt;solution&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the filename
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(filename.c_str(), mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:1:1: error: expected unqualified-id
+    1 | &lt;solution&gt;
+      | ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+Here is the fixed code with the necessary corrections:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the filename
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(filename.c_str(), mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+```
+
+The key change is the removal of the `&lt;solution&gt;` tags which were causing the syntax error. The rest of the code remains the same as it correctly sets up the fuzzing harness for the TIFFOpen function.
+</pre>
+
+
+<h3>Fixer prompt #2</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the filename
+    std::string filename = fuzzed_data.ConsumeRandomLengthString(100);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(filename.c_str(), mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #2</h3>
+
+<pre>
+Certainly! Below is the fixed code with necessary inclusions and corrections to ensure it builds correctly for fuzzing.
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;cstdio&gt; // For temporary file creation
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Create a temporary file for the filename
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzzed data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+    if (!file_data.empty()) {
+        write(fd, file_data.data(), file_data.size());
+    }
+    close(fd);
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(temp_filename, mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    // Remove the temporary file
+    std::remove(temp_filename);
+
+    return 0;
+}
+```
+
+### Explanation of Changes:
+1. **Temporary File Creation**: Instead of using a random string for the filename, which might not be a valid file path, I used `mkstemp` to create a temporary file securely.
+2. **Writing Fuzz Data to File**: The remaining fuzz data is written to the temporary file to ensure it is not empty and can be opened by `TIFFOpen`.
+3. **Library Inclusions**: Included `&lt;cstdio&gt;` for file operations and `&lt;vector&gt;` for handling the fuzzed data bytes.
+
+This ensures that the code utilizes the function under test (`TIFFOpen`) effectively by providing it with a valid file path and mode.
+</pre>
+
+
+<h3>Fixer prompt #3</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;cstdio&gt; // For temporary file creation
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Create a temporary file for the filename
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzzed data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+    if (!file_data.empty()) {
+        write(fd, file_data.data(), file_data.size());
+    }
+    close(fd);
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(temp_filename, mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    // Remove the temporary file
+    std::remove(temp_filename);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:30:9: error: use of undeclared identifier &#39;write&#39;; did you mean &#39;_IO_cookie_io_functions_t::write&#39;?
+   30 |         write(fd, file_data.data(), file_data.size());
+      |         ^~~~~
+      |         _IO_cookie_io_functions_t::write
+/usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h:58:28: note: &#39;_IO_cookie_io_functions_t::write&#39; declared here
+   58 |   cookie_write_function_t *write;       /* Write bytes.  */
+      |                            ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:30:9: error: invalid use of non-static data member &#39;write&#39;
+   30 |         write(fd, file_data.data(), file_data.size());
+      |         ^~~~~
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:32:5: error: use of undeclared identifier &#39;close&#39;
+   32 |     close(fd);
+      |     ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #3</h3>
+
+<pre>
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;cstdio&gt; // For temporary file creation
+#include &lt;unistd.h&gt; // For write and close functions
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Consume a string for the mode
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(10);
+
+    // Ensure the mode string is not empty and has a valid mode character
+    if (mode.empty() || (mode.find_first_of(&#34;rwa+&#34;) == std::string::npos)) {
+        return 0;
+    }
+
+    // Create a temporary file for the filename
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzzed data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeRemainingBytes&lt;uint8_t&gt;();
+    if (!file_data.empty()) {
+        write(fd, file_data.data(), file_data.size());
+    }
+    close(fd);
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFOpen(temp_filename, mode.c_str());
+
+    // If TIFFOpen succeeded, close the TIFF file
+    if (tiff != nullptr) {
+        TIFFClose(tiff);
+    }
+
+    // Remove the temporary file
+    std::remove(temp_filename);
+
+    return 0;
+}
+```
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_5_5/output-libtiff-tiffopen/fixed_targets/01.cc with gpt-4o, attempt 1.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_5_5/output-libtiff-tiffopen/fixed_targets/01.cc with gpt-4o, attempt 2.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_5_5/output-libtiff-tiffopen/fixed_targets/01.cc with gpt-4o, attempt 3.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_5_5/output-libtiff-tiffopen/fixed_targets/01.cc with gpt-4o in 3 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_5_5/output-libtiff-tiffopen/fixed_targets/01.cc with gpt-4o.
+Warning: no crash info in libtiff-tiffopen-01.
+Result for libtiff-tiffopen-01: crashes=False, coverage=0.011991386991386991 (323/26936), coverage diff=0.004246925507718938 (211/49683)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_5_5/output-libtiff-tiffopen/corpora/01.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmpomvyeegd/build/out/libtiff-tiffopen-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: tiff_read_rgba_fuzzer_seed_corpus.zip
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus -dict=tiff_read_rgba_fuzzer.dict &lt; /dev/null
+Dictionary: 40 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2786464782
+INFO: Loaded 1 modules   (26936 inline 8-bit counters): 26936 [0x559d4b939eb8, 0x559d4b9407f0), 
+INFO: Loaded 1 PC tables (26936 PCs): 26936 [0x559d4b9407f0,0x559d4b9a9b70), 
+INFO:     6502 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 16832 bytes
+INFO: seed corpus: files: 6502 min: 1b max: 16832b total: 6363517b rss: 39Mb
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+#6503	INITED cov: 59 ft: 73 corp: 7/479b exec/s: 0 rss: 68Mb
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;�II+&#34;: Bad mode.
+TIFFOpen: &#34;�II+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+#6512	NEW    cov: 59 ft: 74 corp: 8/498b lim: 16832 exec/s: 0 rss: 68Mb L: 19/390 MS: 4 CopyPart-InsertByte-ChangeBinInt-ManualDict- DE: &#34;(\001&#34;-
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+#6539	NEW    cov: 59 ft: 75 corp: 9/516b lim: 16832 exec/s: 0 rss: 68Mb L: 18/390 MS: 2 PersAutoDict-ShuffleBytes- DE: &#34;(\001&#34;-
+TIFFOpen: &#34;+M&#34;: Bad mode.
+#6540	REDUCE cov: 59 ft: 75 corp: 9/510b lim: 16832 exec/s: 0 rss: 68Mb L: 12/390 MS: 1 EraseBytes-
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+#6583	REDUCE cov: 59 ft: 75 corp: 9/442b lim: 16832 exec/s: 0 rss: 68Mb L: 322/322 MS: 3 InsertRepeatedBytes-PersAutoDict-EraseBytes- DE: &#34;(\001&#34;-
+TIFFOpen: &#34;�&#34;: Bad mode.
+TIFFOpen: &#34;�&#34;: Bad mode.
+TIFFOpen: &#34;�&#34;: Bad mode.
+TIFFOpen: &#34;�&#34;: Bad mode.
+TIFFOpen: &#34;�&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II&#34;: Bad mode.
+#6597	NEW    cov: 59 ft: 81 corp: 10/444b lim: 16832 exec/s: 0 rss: 68Mb L: 2/322 MS: 4 ChangeByte-CrossOver-ShuffleBytes-InsertByte-
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&gt;&#34;: Bad mode.
+TIFFOpen: &#34;MM&gt;&#34;: Bad mode.
+TIFFOpen: &#34;MM&gt;&#34;: Bad mode.
+TIFFOpen: &#34;MM&gt;&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+#6609	REDUCE cov: 59 ft: 81 corp: 10/287b lim: 16832 exec/s: 0 rss: 68Mb L: 165/165 MS: 2 ChangeByte-EraseBytes-
+TIFFOpen: &#34;+���������&#34;: Bad mode.
+TIFFOpen: &#34;+���������&#34;: Bad mode.
+TIFFOpen: &#34;+���������&#34;: Bad mode.
+TIFFOpen: &#34;+����	&#34;: Bad mode.
+TIFFOpen: &#34;+����	&#34;: Bad mode.
+#6617	NEW    cov: 59 ft: 85 corp: 11/291b lim: 16832 exec/s: 0 rss: 68Mb L: 4/165 MS: 3 ChangeBit-InsertByte-ManualDict- DE: &#34;\001\001&#34;-
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;I+&#34;: Bad mode.
+TIFFOpen: &#34;I+?&#34;: Bad mode.
+TIFFOpen: &#34;I+?&#34;: Bad mode.
+TIFFOpen: &#34;I+?X&#34;: Bad mode.
+TIFFOpen: &#34;I+?X�(&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;III*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;MMM&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+#6701	REDUCE cov: 59 ft: 85 corp: 11/259b lim: 16832 exec/s: 0 rss: 68Mb L: 133/133 MS: 4 ChangeBinInt-ShuffleBytes-ManualDict-EraseBytes- DE: &#34;\036\001&#34;-
+#6702	NEW    cov: 59 ft: 88 corp: 12/262b lim: 16832 exec/s: 0 rss: 68Mb L: 3/133 MS: 1 InsertByte-
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+&#34;: Bad mode.
+TIFFOpen: &#34;+&#34;: Bad mode.
+TIFFOpen: &#34;+&#34;: Bad mode.
+TIFFOpen: &#34;+&gt;&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;I)+&#34;: Bad mode.
+TIFFOpen: &#34;I)+&#34;: Bad mode.
+TIFFOpen: &#34;I)+&#34;: Bad mode.
+TIFFOpen: &#34;I)+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;0&#34;: Bad mode.
+TIFFOpen: &#34;0&#34;: Bad mode.
+TIFFOpen: &#34;0&#34;: Bad mode.
+TIFFOpen: &#34;0&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+#6774	REDUCE cov: 59 ft: 88 corp: 12/207b lim: 16832 exec/s: 0 rss: 69Mb L: 78/78 MS: 2 ChangeASCIIInt-EraseBytes-
+#6775	REDUCE cov: 59 ft: 88 corp: 12/196b lim: 16832 exec/s: 0 rss: 69Mb L: 29/78 MS: 1 EraseBytes-
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;+M&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;�II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;MM&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+#6851	REDUCE cov: 59 ft: 88 corp: 12/195b lim: 16832 exec/s: 0 rss: 69Mb L: 18/78 MS: 1 EraseBytes-
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II*&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;II+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;�I(I+&#34;: Bad mode.
+TIFFOpen: &#34;AI+&#34;: Bad mode.
+TIFFOpen: &#34;AI+&#34;: Bad mode.
+TIFFOpen: &#34;AI+&#34;: Bad mode.
+TIFFOpen: &#34;AI+&#34;: Bad mod
+...truncated...
+it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_fKvqhd: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_1pHwv9: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_YaJ5fa: Not a TIFF or MDI file, bad magic number 0 (0x0).
+TIFFOpen: &#34;1a�88�&#34;: Bad mode.
+TIFFOpen: &#34;1a�88�&#34;: Bad mode.
+TIFFOpen: &#34;1a�88�$&#34;: Bad mode.
+TIFFOpen: &#34;1a�%8�$&#34;: Bad mode.
+TIFFOpen: &#34;a��������&#34;: Bad mode.
+TIFFOpen: &#34;a������&#34;: Bad mode.
+TIFFOpen: &#34;a��������&#34;: Bad mode.
+TIFFOpen: &#34;a��������&#34;: Bad mode.
+/tmp/fuzz_tiff_12Ruwb: Cannot read TIFF header.
+/tmp/fuzz_tiff_qopN49: Cannot read TIFF header.
+/tmp/fuzz_tiff_pnX2Ab: Cannot read TIFF header.
+/tmp/fuzz_tiff_qRXeac: Cannot read TIFF header.
+/tmp/fuzz_tiff_EYZcJ9: Cannot read TIFF header.
+TIFFOpen: &#34;mm{OOamm&#34;: Bad mode.
+TIFFOpen: &#34;mm{OOamm&#34;: Bad mode.
+TIFFOpen: &#34;mm{OOamamm&#34;: Bad mode.
+TIFFOpen: &#34;mm{mamm&#34;: Bad mode.
+/tmp/fuzz_tiff_BF9hQ9: Not a TIFF or MDI file, bad magic number 313 (0x139).
+/tmp/fuzz_tiff_BYn9Ec: Not a TIFF or MDI file, bad magic number 313 (0x139).
+/tmp/fuzz_tiff_u235Hb: Not a TIFF or MDI file, bad magic number 14660 (0x3944).
+/tmp/fuzz_tiff_TRtFYa: Not a TIFF or MDI file, bad magic number 25412 (0x6344).
+/tmp/fuzz_tiff_ghzicb: Not a TIFF or MDI file, bad magic number 20303 (0x4f4f).
+/tmp/fuzz_tiff_CTj2Ka: Not a TIFF or MDI file, bad magic number 20303 (0x4f4f).
+/tmp/fuzz_tiff_NVjyya: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+/tmp/fuzz_tiff_2fKNFb: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+/tmp/fuzz_tiff_yW6bJb: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+/tmp/fuzz_tiff_jhZARc: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_Zj2LKc: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_5LMk6c: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_VRgMza: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_Chkpyc: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_CJKDya: Cannot read TIFF header.
+/tmp/fuzz_tiff_wcELcb: Cannot read TIFF header.
+/tmp/fuzz_tiff_8eS1Db: Cannot read TIFF header.
+/tmp/fuzz_tiff_nuoJz9: Cannot read TIFF header.
+/tmp/fuzz_tiff_ZxYQKb: Cannot read TIFF header.
+/tmp/fuzz_tiff_ESj9C9: Not a TIFF or MDI file, bad magic number 37522 (0x9292).
+/tmp/fuzz_tiff_E07B4c: Not a TIFF or MDI file, bad magic number 37522 (0x9292).
+/tmp/fuzz_tiff_soCrla: Cannot read TIFF header.
+/tmp/fuzz_tiff_Po78Nb: Not a TIFF or MDI file, bad magic number 20046 (0x4e4e).
+/tmp/fuzz_tiff_EIxkg9: Not a TIFF or MDI file, bad magic number 20046 (0x4e4e).
+/tmp/fuzz_tiff_uaeINa: Not a TIFF or MDI file, bad magic number 17219 (0x4343).
+/tmp/fuzz_tiff_ueojKa: Not a TIFF or MDI file, bad magic number 17219 (0x4343).
+/tmp/fuzz_tiff_92a219: Cannot read TIFF header.
+/tmp/fuzz_tiff_Wzx9cc: Cannot read TIFF header.
+/tmp/fuzz_tiff_HQd6T9: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+/tmp/fuzz_tiff_IRud5b: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+/tmp/fuzz_tiff_mk6PR9: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+/tmp/fuzz_tiff_gMGiSa: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_C83wX9: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_CSTvna: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_cOBr98: Not a TIFF or MDI file, bad magic number 0 (0x0).
+/tmp/fuzz_tiff_jKaqoc: Cannot read TIFF header.
+/tmp/fuzz_tiff_FIWOLb: Cannot read TIFF header.
+/tmp/fuzz_tiff_LXW4ra: Cannot read TIFF header.
+/tmp/fuzz_tiff_XmgcSa: Cannot read TIFF header.
+/tmp/fuzz_tiff_Ew9RWc: Cannot read TIFF header.
+/tmp/fuzz_tiff_1Ehl7a: Cannot read TIFF header.
+/tmp/fuzz_tiff_4TFoe9: Cannot read TIFF header.
+TIFFOpen: &#34;h%haM�&#34;: Bad mode.
+TIFFOpen: &#34;%hhaM�&#34;: Bad mode.
+TIFFOpen: &#34;\\L�a\&#34;: Bad mode.
+TIFFOpen: &#34;\\L�a\&#34;: Bad mode.
+TIFFOpen: &#34;\\L�a\&#34;: Bad mode.
+TIFFOpen: &#34;\\��a\&#34;: Bad mode.
+/tmp/fuzz_tiff_AAj7Bc: Not a TIFF or MDI file, bad magic number 29298 (0x7272).
+/tmp/fuzz_tiff_oHQyWc: Not a TIFF or MDI file, bad magic number 29298 (0x7272).
+/tmp/fuzz_tiff_nUCyq9: Cannot read TIFF header.
+TIFFOpen: &#34;Dc=DDa&#34;: Bad mode.
+TIFFOpen: &#34;8�=DDa&#34;: Bad mode.
+TIFFOpen: &#34;1�=DDa&#34;: Bad mode.
+/tmp/fuzz_tiff_l63nsd: Not a TIFF or MDI file, bad magic number 9766 (0x2626).
+/tmp/fuzz_tiff_FlkLtb: Not a TIFF or MDI file, bad magic number 9766 (0x2626).
+/tmp/fuzz_tiff_aY7JXc: Not a TIFF or MDI file, bad magic number 9766 (0x2626).
+/tmp/fuzz_tiff_a3VkVc: Not a TIFF or MDI file, bad magic number 9766 (0x2626).
+/tmp/fuzz_tiff_xK5ayb: Not a TIFF or MDI file, bad magic number 9766 (0x2626).
+TIFFOpen: &#34;*CCarmr&#34;: Bad mode.
+TIFFOpen: &#34;*CCarmr���&#34;: Bad mode.
+TIFFOpen: &#34;*CCarmrmr�&#34;: Bad mode.
+TIFFOpen: &#34;*CCarmrmr/&#34;: Bad mode.
+TIFFOpen: &#34;*CCarmrmr/&#34;: Bad mode.
+/tmp/fuzz_tiff_tFu2kc: Not a TIFF or MDI file, bad magic number 77 (0x4d).
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;&#34;: Bad mode.
+TIFFOpen: &#34;rm&#39;�&#34;: Bad mode.
+/tmp/fuzz_tiff_TcsmTa: Cannot read TIFF header.
+/tmp/fuzz_tiff_7oC8tc: Cannot read TIFF header.
+/tmp/fuzz_tiff_lNPLb9: Cannot read TIFF header.
+/tmp/fuzz_tiff_zNXOUb: Cannot read TIFF header.
+/tmp/fuzz_tiff_8vS4gb: Cannot read TIFF header.
+/tmp/fuzz_tiff_ycjdnc: Not a TIFF or MDI file, bad magic number 8481 (0x2121).
+/tmp/fuzz_tiff_1dckYc: Not a TIFF or MDI file, bad magic number 8481 (0x2121).
+/tmp/fuzz_tiff_Pj4e9b: Not a TIFF or MDI file, bad magic number 8481 (0x2121).
+/tmp/fuzz_tiff_yoNn5a: Not a TIFF or MDI file, bad magic number 8481 (0x2121).
+/tmp/fuzz_tiff_ToOrc9: Not a TIFF or MDI file, bad magic number 8481 (0x2121).
+/tmp/fuzz_tiff_yyey19: Not a TIFF file, bad version number 18761 (0x4949).
+/tmp/fuzz_tiff_UyH9td: Not a TIFF file, bad version number 18925 (0x49ed).
+/tmp/fuzz_tiff_JzHZ6b: Not a TIFF or MDI file, bad magic number 16201 (0x3f49).
+/tmp/fuzz_tiff_wCKyl9: Not a TIFF or MDI file, bad magic number 16201 (0x3f49).
+/tmp/fuzz_tiff_kDncGc: Not a TIFF or MDI file, bad magic number 54998 (0xd6d6).
+/tmp/fuzz_tiff_OtO2nc: Cannot read TIFF header.
+/tmp/fuzz_tiff_iocAQa: Not a TIFF or MDI file, bad magic number 23901 (0x5d5d).
+/tmp/fuzz_tiff_bzrdqc: Not a TIFF or MDI file, bad magic number 23901 (0x5d5d).
+/tmp/fuzz_tiff_rNwXHb: Not a TIFF or MDI file, bad magic number 23901 (0x5d5d).
+/tmp/fuzz_tiff_1W26Jb: Not a TIFF or MDI file, bad magic number 23901 (0x5d5d).
+/tmp/fuzz_tiff_Vic6Ea: Not a TIFF or MDI file, bad magic number 23901 (0x5d5d).
+/tmp/fuzz_tiff_eSsbub: Warning, H(ost) mode is deprecated. Since libtiff 4.5.1, it is an alias of &#39;B&#39; / FILLORDER_MSB2LSB..
+/tmp/fuzz_tiff_eSsbub: Cannot read TIFF header.
+/tmp/fuzz_tiff_ZPYLBa: Not a TIFF or MDI file, bad magic number 41634 (0xa2a2).
+/tmp/fuzz_tiff_4wqD29: Cannot read TIFF header.
+/tmp/fuzz_tiff_5BEF4b: Not a TIFF or MDI file, bad magic number 0 (0x0).
+TIFFFetchDirectory: /tmp/fuzz_tiff_NNxeZa: Can not read TIFF directory count.
+TIFFReadDirectory: Failed to read directory at offset 1296912365.
+TIFFFetchDirectory: /tmp/fuzz_tiff_9oE669: Can not read TIFF directory count.
+TIFFReadDirectory: Failed to read directory at offset 1297043437.
+TIFFFetchDirectory: /tmp/fuzz_tiff_tJPLBa: Can not read TIFF directory count.
+TIFFReadDirectory: Failed to read directory at offset 1297043437.
+TIFFFetchDirectory: /tmp/fuzz_tiff_9211va: Can not read TIFF directory count.
+TIFFReadDirectory: Failed to read directory at offset 1297043437.
+/tmp/fuzz_tiff_Vmr5na: Not a TIFF or MDI file, bad magic number 20333 (0x4f6d).
+#47324	DONE   cov: 323 ft: 467 corp: 125/1092b lim: 16832 exec/s: 1526 rss: 70Mb
+###### Recommended dictionary. ######
+&#34;\001\000\000\000&#34; # Uses: 150
+&#34;\000\000\000\000&#34; # Uses: 169
+&#34;\376\377\377\372&#34; # Uses: 134
+&#34;\000\000\002/&#34; # Uses: 110
+&#34;\376\377\377\377&#34; # Uses: 99
+&#34;\001\000\000\000\000\000\000\010&#34; # Uses: 74
+&#34;\203\027&#34; # Uses: 55
+&#34;\377\377\377\377\377\377\377\005&#34; # Uses: 7
+###### End of recommended dictionary. ######
+Done 47324 runs in 31 second(s)
+stat::number_of_executed_units: 47324
+stat::average_exec_per_sec:     1526
+stat::new_units_added:          461
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              70
+
+</pre>
+
+
+</body>

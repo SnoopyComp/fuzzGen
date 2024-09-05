@@ -1,0 +1,676 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libtiff-tifffdopenext / 02</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstdio&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;unistd.h&gt;  // For write, close, lseek, unlink
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to simulate file descriptor operations
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(size);
+    if (write(fd, file_data.data(), file_data.size()) == -1) {
+        close(fd);
+        return 0;
+    }
+
+    // Reset file descriptor to the beginning of the file
+    lseek(fd, 0, SEEK_SET);
+
+    // Generate other parameters for TIFFFdOpenExt
+    std::string name = fuzzed_data.ConsumeRandomLengthString(20);
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(5);
+
+    // Ensure mode is not empty and has valid characters for file mode
+    if (mode.empty() || mode.find_first_not_of(&#34;rwb+&#34;) != std::string::npos) {
+        mode = &#34;r&#34;;  // Default to read mode
+    }
+
+    // Create TIFFOpenOptions object
+    TIFFOpenOptions *options = TIFFOpenOptionsAlloc();
+    if (!options) {
+        close(fd);
+        unlink(temp_filename);
+        return 0;
+    }
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFFdOpenExt(fd, name.c_str(), mode.c_str(), options);
+
+    // Perform any necessary cleanup
+    if (tiff) {
+        TIFFClose(tiff);
+    }
+
+    TIFFOpenOptionsFree(options);
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+&lt;solution&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstdio&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to simulate file descriptor operations
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(size);
+    if (write(fd, file_data.data(), file_data.size()) == -1) {
+        close(fd);
+        return 0;
+    }
+
+    // Reset file descriptor to the beginning of the file
+    lseek(fd, 0, SEEK_SET);
+
+    // Generate other parameters for TIFFFdOpenExt
+    std::string name = fuzzed_data.ConsumeRandomLengthString(20);
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(5);
+
+    // Ensure mode is not empty and has valid characters for file mode
+    if (mode.empty() || mode.find_first_not_of(&#34;rwb+&#34;) != std::string::npos) {
+        mode = &#34;r&#34;;  // Default to read mode
+    }
+
+    // Create TIFFOpenOptions object
+    TIFFOpenOptions *options = TIFFOpenOptionsAlloc();
+    if (!options) {
+        close(fd);
+        unlink(temp_filename);
+        return 0;
+    }
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFFdOpenExt(fd, name.c_str(), mode.c_str(), options);
+
+    // Perform any necessary cleanup
+    if (tiff) {
+        TIFFClose(tiff);
+    }
+
+    TIFFOpenOptionsFree(options);
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:1:1: error: expected unqualified-id
+    1 | &lt;solution&gt;
+      | ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:22:9: error: use of undeclared identifier &#39;write&#39;; did you mean &#39;_IO_cookie_io_functions_t::write&#39;?
+   22 |     if (write(fd, file_data.data(), file_data.size()) == -1) {
+      |         ^~~~~
+      |         _IO_cookie_io_functions_t::write
+/usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h:58:28: note: &#39;_IO_cookie_io_functions_t::write&#39; declared here
+   58 |   cookie_write_function_t *write;       /* Write bytes.  */
+      |                            ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:22:9: error: invalid use of non-static data member &#39;write&#39;
+   22 |     if (write(fd, file_data.data(), file_data.size()) == -1) {
+      |         ^~~~~
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:23:9: error: use of undeclared identifier &#39;close&#39;
+   23 |         close(fd);
+      |         ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:28:5: error: use of undeclared identifier &#39;lseek&#39;; did you mean &#39;fseek&#39;?
+   28 |     lseek(fd, 0, SEEK_SET);
+      |     ^~~~~
+      |     fseek
+/usr/include/stdio.h:684:12: note: &#39;fseek&#39; declared here
+  684 | extern int fseek (FILE *__stream, long int __off, int __whence);
+      |            ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:28:11: error: cannot initialize a parameter of type &#39;FILE *&#39; (aka &#39;_IO_FILE *&#39;) with an lvalue of type &#39;int&#39;
+   28 |     lseek(fd, 0, SEEK_SET);
+      |           ^~
+/usr/include/stdio.h:684:25: note: passing argument to parameter &#39;__stream&#39; here
+  684 | extern int fseek (FILE *__stream, long int __off, int __whence);
+      |                         ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:42:9: error: use of undeclared identifier &#39;close&#39;
+   42 |         close(fd);
+      |         ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:43:9: error: use of undeclared identifier &#39;unlink&#39;
+   43 |         unlink(temp_filename);
+      |         ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:56:5: error: use of undeclared identifier &#39;close&#39;
+   56 |     close(fd);
+      |     ^
+/src/libtiff/contrib/oss-fuzz/tiff_read_rgba_fuzzer.cc:57:5: error: use of undeclared identifier &#39;unlink&#39;
+   57 |     unlink(temp_filename);
+      |     ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &lt;tiffio.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdlib&gt;
+#include &lt;cstdio&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;unistd.h&gt;  // For write, close, lseek, unlink
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create a temporary file to simulate file descriptor operations
+    char temp_filename[] = &#34;/tmp/fuzz_tiff_XXXXXX&#34;;
+    int fd = mkstemp(temp_filename);
+    if (fd == -1) {
+        return 0;
+    }
+
+    // Write fuzz data to the temporary file
+    std::vector&lt;uint8_t&gt; file_data = fuzzed_data.ConsumeBytes&lt;uint8_t&gt;(size);
+    if (write(fd, file_data.data(), file_data.size()) == -1) {
+        close(fd);
+        return 0;
+    }
+
+    // Reset file descriptor to the beginning of the file
+    lseek(fd, 0, SEEK_SET);
+
+    // Generate other parameters for TIFFFdOpenExt
+    std::string name = fuzzed_data.ConsumeRandomLengthString(20);
+    std::string mode = fuzzed_data.ConsumeRandomLengthString(5);
+
+    // Ensure mode is not empty and has valid characters for file mode
+    if (mode.empty() || mode.find_first_not_of(&#34;rwb+&#34;) != std::string::npos) {
+        mode = &#34;r&#34;;  // Default to read mode
+    }
+
+    // Create TIFFOpenOptions object
+    TIFFOpenOptions *options = TIFFOpenOptionsAlloc();
+    if (!options) {
+        close(fd);
+        unlink(temp_filename);
+        return 0;
+    }
+
+    // Call the function-under-test
+    TIFF *tiff = TIFFFdOpenExt(fd, name.c_str(), mode.c_str(), options);
+
+    // Perform any necessary cleanup
+    if (tiff) {
+        TIFFClose(tiff);
+    }
+
+    TIFFOpenOptionsFree(options);
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
+```
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_1_1/output-libtiff-tifffdopenext/fixed_targets/02.cc with gpt-4o, attempt 1.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_1_1/output-libtiff-tifffdopenext/fixed_targets/02.cc with gpt-4o in 1 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_1_1/output-libtiff-tifffdopenext/fixed_targets/02.cc with gpt-4o.
+Warning: no crash info in libtiff-tifffdopenext-02.
+Result for libtiff-tifffdopenext-02: crashes=False, coverage=0.2206896551724138 (32/145), coverage diff=0.0010466356701487431 (52/49683)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+Unable to find image &#39;gcr.io/oss-fuzz-base/base-runner:latest&#39; locally
+latest: Pulling from oss-fuzz-base/base-runner
+b549f31133a9: Already exists
+139edd167df6: Already exists
+af444f75ae33: Already exists
+14f3915e7420: Already exists
+a9ff08083a25: Already exists
+9dc48c872e73: Already exists
+96346b8c0f36: Pulling fs layer
+bb156b2edaf9: Pulling fs layer
+9e51d1915cc4: Pulling fs layer
+d6a22ed24534: Pulling fs layer
+aa0d26fc0d9f: Pulling fs layer
+f93655e29f16: Pulling fs layer
+1bf9cfa4140a: Pulling fs layer
+572f87638d3c: Pulling fs layer
+dfc0d26bd8f6: Pulling fs layer
+98e19f74b586: Pulling fs layer
+f2d989760d0c: Pulling fs layer
+b32590a08972: Pulling fs layer
+367baa430ffc: Pulling fs layer
+424ab3846cad: Pulling fs layer
+424ab3846cad: Download complete
+1bf9cfa4140a: Download complete
+bb156b2edaf9: Download complete
+9e51d1915cc4: Download complete
+d6a22ed24534: Download complete
+aa0d26fc0d9f: Download complete
+f93655e29f16: Download complete
+98e19f74b586: Download complete
+572f87638d3c: Download complete
+dfc0d26bd8f6: Download complete
+b32590a08972: Download complete
+f2d989760d0c: Download complete
+367baa430ffc: Download complete
+96346b8c0f36: Pull complete
+bb156b2edaf9: Pull complete
+9e51d1915cc4: Pull complete
+d6a22ed24534: Pull complete
+aa0d26fc0d9f: Pull complete
+f93655e29f16: Pull complete
+1bf9cfa4140a: Pull complete
+572f87638d3c: Pull complete
+dfc0d26bd8f6: Pull complete
+98e19f74b586: Pull complete
+f2d989760d0c: Pull complete
+b32590a08972: Pull complete
+367baa430ffc: Pull complete
+424ab3846cad: Pull complete
+Digest: sha256:e1eba5efa394fec01565cc17a38ae61ff209acf11e7ce30f0af8f3e06089a026
+Status: Image is up to date for gcr.io/oss-fuzz-base/base-runner:latest
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libtiff/lv1_1_1/output-libtiff-tifffdopenext/corpora/02.cc:/tmp/tiff_read_rgba_fuzzer_corpus -v /tmp/tmpz5rcddj_/build/out/libtiff-tifffdopenext-02:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer tiff_read_rgba_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/tiff_read_rgba_fuzzer_corpus&#39;: Device or resource busy
+/out/tiff_read_rgba_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/tiff_read_rgba_fuzzer_corpus &lt; /dev/null
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1988371275
+INFO: Loaded 1 modules   (145 inline 8-bit counters): 145 [0x55bc3e1d7158, 0x55bc3e1d71e9), 
+INFO: Loaded 1 PC tables (145 PCs): 145 [0x55bc3e1d71f0,0x55bc3e1d7b00), 
+INFO:        0 files found in /tmp/tiff_read_rgba_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+: Cannot read TIFF header.
+INFO: A corpus is not provided, starting from an empty corpus
+: Cannot read TIFF header.
+#2	INITED cov: 31 ft: 32 corp: 1/1b exec/s: 0 rss: 27Mb
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+#4	NEW    cov: 32 ft: 33 corp: 2/3b lim: 4096 exec/s: 0 rss: 27Mb L: 2/2 MS: 2 ChangeByte-InsertByte-
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+#5	NEW    cov: 32 ft: 34 corp: 3/59b lim: 4096 exec/s: 0 rss: 27Mb L: 56/56 MS: 1 InsertRepeatedBytes-
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+#14	NEW    cov: 32 ft: 35 corp: 4/91b lim: 4096 exec/s: 0 rss: 27Mb L: 32/56 MS: 4 CrossOver-ChangeByte-CrossOver-EraseBytes-
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 59903 (0xe9ff).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+#21	NEW    cov: 32 ft: 36 corp: 5/94b lim: 4096 exec/s: 0 rss: 27Mb L: 3/56 MS: 2 ChangeBit-InsertByte-
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+#24	NEW    cov: 32 ft: 37 corp: 6/276b lim: 4096 exec/s: 0 rss: 27Mb L: 182/182 MS: 3 InsertRepeatedBytes-CrossOver-CrossOver-
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 3341 (0xd0d).
+: Not a TIFF or MDI file, bad magic number 3341 (0xd0d).
+: Not a TIFF or MDI file, bad magic number 3341 (0xd0d).
+: Not a TIFF or MDI file, bad magic number 3341 (0xd0d).
+: Not a TIFF or MDI file, bad magic number 3341 (0xd0d).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+#46	NEW    cov: 32 ft: 38 corp: 7/280b lim: 4096 exec/s: 0 rss: 27Mb L: 4/182 MS: 2 ChangeBit-CopyPart-
+: Cannot read TIFF header.
+#47	NEW    cov: 32 ft: 39 corp: 8/285b lim: 4096 exec/s: 0 rss: 27Mb L: 5/182 MS: 1 InsertByte-
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+#48	REDUCE cov: 32 ft: 39 corp: 8/279b lim: 4096 exec/s: 0 rss: 27Mb L: 50/182 MS: 1 EraseBytes-
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 65337 (0xff39).
+: Not a TIFF or MDI file, bad magic number 65337 (0xff39).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 13821 (0x35fd).
+#62	NEW    cov: 32 ft: 40 corp: 9/291b lim: 4096 exec/s: 0 rss: 27Mb L: 12/182 MS: 4 ChangeASCIIInt-InsertByte-InsertByte-CopyPart-
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 64813 (0xfd2d).
+: Not a TIFF or MDI file, bad magic number 64813 (0xfd2d).
+: Not a TIFF or MDI file, bad magic number 64813 (0xfd2d).
+: Not a TIFF or MDI file, bad magic number 64813 (0xfd2d).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 11773 (0x2dfd).
+: Not a TIFF or MDI file, bad magic number 11773 (0x2dfd).
+: Not a TIFF or MDI file, bad magic number 11773 (0x2dfd).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+#90	REDUCE cov: 32 ft: 40 corp: 9/285b lim: 4096 exec/s: 0 rss: 27Mb L: 44/182 MS: 3 CrossOver-ChangeBit-EraseBytes-
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic number 15871 (0x3dff).
+: Not a TIFF or MDI file, bad magic numbe
+...truncated...
+e, bad magic number 65535 (0xffff).
+: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+: Not a TIFF or MDI file, bad magic number 65535 (0xffff).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 509 (0x1fd).
+: Not a TIFF or MDI file, bad magic number 509 (0x1fd).
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 10 (0xa).
+: Not a TIFF or MDI file, bad magic number 10 (0xa).
+: Not a TIFF or MDI file, bad magic number 10 (0xa).
+: Not a TIFF or MDI file, bad magic number 10 (0xa).
+: Not a TIFF or MDI file, bad magic number 10 (0xa).
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 65322 (0xff2a).
+: Not a TIFF or MDI file, bad magic number 20266 (0x4f2a).
+: Not a TIFF or MDI file, bad magic number 20266 (0x4f2a).
+: Not a TIFF or MDI file, bad magic number 20266 (0x4f2a).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 1802 (0x70a).
+: Not a TIFF or MDI file, bad magic number 1802 (0x70a).
+: Not a TIFF or MDI file, bad magic number 1802 (0x70a).
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 65358 (0xff4e).
+: Not a TIFF or MDI file, bad magic number 65358 (0xff4e).
+: Not a TIFF or MDI file, bad magic number 65358 (0xff4e).
+: Not a TIFF or MDI file, bad magic number 65358 (0xff4e).
+: Not a TIFF or MDI file, bad magic number 64768 (0xfd00).
+: Not a TIFF or MDI file, bad magic number 64768 (0xfd00).
+: Not a TIFF or MDI file, bad magic number 64768 (0xfd00).
+: Not a TIFF or MDI file, bad magic number 64768 (0xfd00).
+: Not a TIFF or MDI file, bad magic number 64768 (0xfd00).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 65280 (0xff00).
+: Not a TIFF or MDI file, bad magic number 65280 (0xff00).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 65418 (0xff8a).
+: Not a TIFF or MDI file, bad magic number 65418 (0xff8a).
+: Not a TIFF or MDI file, bad magic number 65418 (0xff8a).
+: Not a TIFF or MDI file, bad magic number 65418 (0xff8a).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Not a TIFF or MDI file, bad magic number 0 (0x0).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 36329 (0x8de9).
+: Not a TIFF or MDI file, bad magic number 36329 (0x8de9).
+: Not a TIFF or MDI file, bad magic number 13823 (0x35ff).
+: Not a TIFF or MDI file, bad magic number 12543 (0x30ff).
+: Not a TIFF or MDI file, bad magic number 12543 (0x30ff).
+: Not a TIFF or MDI file, bad magic number 12543 (0x30ff).
+: Not a TIFF or MDI file, bad magic number 12543 (0x30ff).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 48637 (0xbdfd).
+: Not a TIFF or MDI file, bad magic number 59881 (0xe9e9).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 65290 (0xff0a).
+: Not a TIFF or MDI file, bad magic number 65290 (0xff0a).
+: Not a TIFF or MDI file, bad magic number 65290 (0xff0a).
+: Not a TIFF or MDI file, bad magic number 2610 (0xa32).
+: Not a TIFF or MDI file, bad magic number 2610 (0xa32).
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 59786 (0xe98a).
+: Not a TIFF or MDI file, bad magic number 59786 (0xe98a).
+: Not a TIFF or MDI file, bad magic number 59786 (0xe98a).
+: Not a TIFF or MDI file, bad magic number 59786 (0xe98a).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Not a TIFF or MDI file, bad magic number 12541 (0x30fd).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 253 (0xfd).
+: Not a TIFF or MDI file, bad magic number 253 (0xfd).
+: Not a TIFF or MDI file, bad magic number 253 (0xfd).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 2304 (0x900).
+: Not a TIFF or MDI file, bad magic number 2304 (0x900).
+: Cannot read TIFF header.
+: Cannot read TIFF header.
+: Not a TIFF or MDI file, bad magic number 50983 (0xc727).
+: Not a TIFF or MDI file, bad magic number 50983 (0xc727).
+: Not a TIFF or MDI file, bad magic number 50983 (0xc727).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+: Not a TIFF or MDI file, bad magic number 48639 (0xbdff).
+#22496	DONE   cov: 32 ft: 40 corp: 9/203b lim: 4096 exec/s: 725 rss: 28Mb
+###### Recommended dictionary. ######
+&#34;\000\000\000\000\000\000\000\000&#34; # Uses: 901
+&#34;\000\000\000\000&#34; # Uses: 925
+###### End of recommended dictionary. ######
+Done 22496 runs in 31 second(s)
+stat::number_of_executed_units: 22496
+stat::average_exec_per_sec:     725
+stat::new_units_added:          28
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              28
+
+</pre>
+
+
+</body>

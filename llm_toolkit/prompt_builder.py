@@ -37,7 +37,7 @@ DEFAULT_TEMPLATE_DIR: str = 'prompts/template_xml/'
 
 # TODO(Dongge): Refactor this tot avoid hard-coding.
 # Example files.
-EXAMPLE_PATH = os.path.join('prompts', 'example')
+EXAMPLE_PATH = os.path.join('prompts', 'example','libtiff')
 # Example with FuzzeDataProvider.
 FDP_EXAMPLE_1_PROBLEM = os.path.join(EXAMPLE_PATH, 'gdImageString-problem.txt')
 FDP_EXAMPLE_1_SOLUTION = os.path.join(EXAMPLE_PATH, 'gdImageString-solution.cc')
@@ -67,13 +67,13 @@ FDP_JVM_EXAMPLE_2_SOLUTION = os.path.join(EXAMPLE_PATH,
 
 EXAMPLES = {
     'c++': [
-        [FDP_EXAMPLE_1_PROBLEM, FDP_EXAMPLE_1_SOLUTION],
-        [FDP_EXAMPLE_2_PROBLEM, FDP_EXAMPLE_2_SOLUTION],
-#        [CPP01_PBL,CPP01_SOL],
-#        [CPP02_PBL,CPP02_SOL],
-#        [CPP03_PBL,CPP03_SOL],
-#        [CPP04_PBL,CPP04_SOL],
-#        [CPP05_PBL,CPP05_SOL],
+#        [FDP_EXAMPLE_1_PROBLEM, FDP_EXAMPLE_1_SOLUTION],
+#        [FDP_EXAMPLE_2_PROBLEM, FDP_EXAMPLE_2_SOLUTION],
+        [CPP01_PBL,CPP01_SOL],
+        [CPP02_PBL,CPP02_SOL],
+        [CPP03_PBL,CPP03_SOL],
+        [CPP04_PBL,CPP04_SOL],
+        [CPP05_PBL,CPP05_SOL],
 
     ],
     'c': [

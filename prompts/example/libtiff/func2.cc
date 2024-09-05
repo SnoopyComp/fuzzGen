@@ -1,10 +1,12 @@
 #include <fuzzer/FuzzedDataProvider.h>
+#include <tiffio.h>
 #include <cstdint>
 #include <cstdlib>
-#include <tiffio.h>
-#include <unistd.h>
+#include <cstdio>
 #include <vector>
-#include <string.h> // For memset
+#include <string>
+#include <unistd.h>
+#include <fcntl.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     FuzzedDataProvider stream(data, size);
@@ -59,4 +61,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
 
     TIFFOpenOptionsFree(options);
-    
+    close(fd);
+    unlink(temp_filename);
+
+    return 0;
+}
