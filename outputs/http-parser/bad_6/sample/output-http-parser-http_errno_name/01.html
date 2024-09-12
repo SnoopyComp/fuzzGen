@@ -1,0 +1,492 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-http-parser-http_errno_name / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &#34;http_parser.h&#34;
+#include &lt;stdint.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+  if (size == 0) return 0;
+
+  http_parser parser;
+  http_parser_init(&amp;parser, HTTP_BOTH);
+
+  http_parser_settings settings;
+  memset(&amp;settings, 0, sizeof(settings));
+
+  // Set up dummy callbacks to ensure the parser works correctly.
+  settings.on_message_begin = [](http_parser* p) { return 0; };
+  settings.on_url = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_status = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_header_field = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_header_value = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_headers_complete = [](http_parser* p) { return 0; };
+  settings.on_body = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_message_complete = [](http_parser* p) { return 0; };
+  settings.on_chunk_header = [](http_parser* p) { return 0; };
+  settings.on_chunk_complete = [](http_parser* p) { return 0; };
+
+  size_t nparsed = http_parser_execute(&amp;parser, &amp;settings, (const char*)data, size);
+
+  if (nparsed != size) {
+    enum http_errno err_no = HTTP_PARSER_ERRNO(&amp;parser);
+    const char *name = http_errno_name(err_no);
+    const char *description = http_errno_description(err_no);
+  }
+
+  return 0;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+&lt;solution&gt;
+#include &#34;http_parser.h&#34;
+#include &lt;stdint.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+  if (size == 0) return 0;
+
+  enum http_errno err_no = static_cast&lt;enum http_errno&gt;(data[0] % 20); // Assuming 20 is the max value for http_errno
+  const char *name = http_errno_name(err_no);
+
+  return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+fuzzers/fuzz_url.c:1:1: error: expected identifier or &#39;(&#39;
+    1 | &lt;solution&gt;
+      | ^
+fuzzers/fuzz_url.c:5:8: error: expected identifier or &#39;(&#39;
+    5 | extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+      |        ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+Sure, here is the fixed code:
+
+```c
+#include &#34;http_parser.h&#34;
+#include &lt;stdint.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+  if (size == 0) return 0;
+
+  enum http_errno err_no = static_cast&lt;enum http_errno&gt;(data[0] % 20); // Assuming 20 is the max value for http_errno
+  const char *name = http_errno_name(err_no);
+
+  return 0;
+}
+```
+
+And here is the fixed code with the necessary corrections:
+
+```c
+#include &#34;http_parser.h&#34;
+#include &lt;stdint.h&gt;
+
+#ifdef __cplusplus
+extern &#34;C&#34; {
+#endif
+
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+  if (size == 0) return 0;
+
+  enum http_errno err_no = (enum http_errno)(data[0] % 20); // Assuming 20 is the max value for http_errno
+  const char *name = http_errno_name(err_no);
+
+  return 0;
+}
+
+#ifdef __cplusplus
+}
+#endif
+```
+
+Changes made:
+1. Removed the erroneous `&lt;solution&gt;` tags.
+2. Wrapped the function declaration in `extern &#34;C&#34;` block with preprocessor checks to ensure compatibility with C++ compilers.
+3. Replaced `static_cast&lt;enum http_errno&gt;` with a C-style cast `(enum http_errno)` to be compatible with C.
+</pre>
+
+
+<h3>Fixer prompt #2</h3>
+<pre>
+
+Given the following C fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+#include &#34;http_parser.h&#34;
+#include &lt;stdint.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+  if (size == 0) return 0;
+
+  enum http_errno err_no = static_cast&lt;enum http_errno&gt;(data[0] % 20); // Assuming 20 is the max value for http_errno
+  const char *name = http_errno_name(err_no);
+
+  return 0;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code can build successfully but has a runtime issue: No code coverage increasement, indicating the fuzz target ineffectively invokes the function under test.
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #2</h3>
+
+<pre>
+To address the issue of no code coverage increase, we need to ensure that the fuzz target effectively invokes the function under test and processes the input data meaningfully. In this case, we should parse the input data using `http_parser` and handle it appropriately.
+
+Here&#39;s the updated code:
+
+```c
+#include &#34;http_parser.h&#34;
+#include &lt;stdint.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+  if (size == 0) return 0;
+
+  http_parser parser;
+  http_parser_init(&amp;parser, HTTP_BOTH);
+
+  http_parser_settings settings;
+  memset(&amp;settings, 0, sizeof(settings));
+
+  // Set up dummy callbacks to ensure the parser works correctly.
+  settings.on_message_begin = [](http_parser* p) { return 0; };
+  settings.on_url = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_status = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_header_field = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_header_value = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_headers_complete = [](http_parser* p) { return 0; };
+  settings.on_body = [](http_parser* p, const char* at, size_t length) { return 0; };
+  settings.on_message_complete = [](http_parser* p) { return 0; };
+  settings.on_chunk_header = [](http_parser* p) { return 0; };
+  settings.on_chunk_complete = [](http_parser* p) { return 0; };
+
+  size_t nparsed = http_parser_execute(&amp;parser, &amp;settings, (const char*)data, size);
+
+  if (nparsed != size) {
+    enum http_errno err_no = HTTP_PARSER_ERRNO(&amp;parser);
+    const char *name = http_errno_name(err_no);
+    const char *description = http_errno_description(err_no);
+  }
+
+  return 0;
+}
+```
+
+### Explanation:
+1. **Initialization of `http_parser` and `http_parser_settings`:** We initialize the `http_parser` and `http_parser_settings` structures. This ensures that the parser is set up correctly.
+2. **Setting up dummy callbacks:** We set up dummy callback functions for all the events that the parser can trigger. This ensures that the parser works correctly and processes the input data.
+3. **Executing the parser:** We call `http_parser_execute` with the input data. This function will parse the input data and invoke the appropriate callbacks.
+4. **Handling parsing errors:** If the parsing does not consume all the input data, we retrieve the error using `HTTP_PARSER_ERRNO` and get its name and description.
+
+By making these changes, we ensure that the fuzz target effectively invokes the `http_parser` with the input data, leading to meaningful code coverage and potentially uncovering bugs in the parser.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/http-parser/bad_6/output-http-parser-http_errno_name/fixed_targets/01.c with gpt-4o, attempt 1.
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/http-parser/bad_6/output-http-parser-http_errno_name/fixed_targets/01.c with gpt-4o, attempt 2.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/http-parser/bad_6/output-http-parser-http_errno_name/fixed_targets/01.c with gpt-4o in 2 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/http-parser/bad_6/output-http-parser-http_errno_name/fixed_targets/01.c with gpt-4o.
+Warning: no crash info in http-parser-http_errno_name-01.
+Result for http-parser-http_errno_name-01: crashes=False, coverage=0.22489082969432314 (206/916), coverage diff=0.006289308176100629 (10/1590)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/http-parser/bad_6/output-http-parser-http_errno_name/corpora/01.c:/tmp/fuzz_url_corpus -v /tmp/tmpxccw0e33/build/out/http-parser-http_errno_name-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer fuzz_url -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/fuzz_url_corpus&#39;: Device or resource busy
+/out/fuzz_url -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/fuzz_url_corpus &lt; /dev/null
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1091831193
+INFO: Loaded 1 modules   (916 inline 8-bit counters): 916 [0x55bed1ab6ab0, 0x55bed1ab6e44), 
+INFO: Loaded 1 PC tables (916 PCs): 916 [0x55bed1ab6e48,0x55bed1aba788), 
+INFO:        0 files found in /tmp/fuzz_url_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: A corpus is not provided, starting from an empty corpus
+#2	INITED cov: 13 ft: 14 corp: 1/1b exec/s: 0 rss: 29Mb
+	NEW_FUNC[1/2]: 0x55bed1a472d0 in http_errno_name /src/http-parser/http_parser.c:2242
+	NEW_FUNC[2/2]: 0x55bed1a47360 in http_errno_description /src/http-parser/http_parser.c:2248
+#3	NEW    cov: 22 ft: 24 corp: 2/3b lim: 4096 exec/s: 0 rss: 30Mb L: 2/2 MS: 1 InsertByte-
+#4	NEW    cov: 23 ft: 25 corp: 3/123b lim: 4096 exec/s: 0 rss: 30Mb L: 120/120 MS: 1 InsertRepeatedBytes-
+#30	NEW    cov: 23 ft: 28 corp: 4/126b lim: 4096 exec/s: 0 rss: 30Mb L: 3/120 MS: 1 CrossOver-
+#36	NEW    cov: 23 ft: 29 corp: 5/129b lim: 4096 exec/s: 0 rss: 30Mb L: 3/120 MS: 1 CopyPart-
+#47	NEW    cov: 23 ft: 31 corp: 6/133b lim: 4096 exec/s: 0 rss: 30Mb L: 4/120 MS: 1 InsertByte-
+#53	NEW    cov: 23 ft: 32 corp: 7/137b lim: 4096 exec/s: 0 rss: 30Mb L: 4/120 MS: 1 CopyPart-
+#54	NEW    cov: 24 ft: 33 corp: 8/140b lim: 4096 exec/s: 0 rss: 30Mb L: 3/120 MS: 1 ChangeByte-
+#64	NEW    cov: 24 ft: 34 corp: 9/146b lim: 4096 exec/s: 0 rss: 30Mb L: 6/120 MS: 5 EraseBytes-CrossOver-CopyPart-CopyPart-CopyPart-
+#70	NEW    cov: 24 ft: 36 corp: 10/154b lim: 4096 exec/s: 0 rss: 30Mb L: 8/120 MS: 1 CrossOver-
+#86	NEW    cov: 24 ft: 37 corp: 11/165b lim: 4096 exec/s: 0 rss: 30Mb L: 11/120 MS: 1 CrossOver-
+	NEW_FUNC[1/1]: 0x55bed1a48f10 in LLVMFuzzerTestOneInput::$_0::__invoke(http_parser*) /src/http-parser/fuzzers/fuzz_url.cpp:16
+#188	NEW    cov: 30 ft: 43 corp: 12/262b lim: 4096 exec/s: 0 rss: 30Mb L: 97/120 MS: 2 EraseBytes-InsertRepeatedBytes-
+#214	NEW    cov: 31 ft: 44 corp: 13/265b lim: 4096 exec/s: 0 rss: 30Mb L: 3/120 MS: 1 ChangeByte-
+#230	REDUCE cov: 31 ft: 44 corp: 13/264b lim: 4096 exec/s: 0 rss: 30Mb L: 2/120 MS: 1 EraseBytes-
+#260	REDUCE cov: 31 ft: 44 corp: 13/217b lim: 4096 exec/s: 0 rss: 30Mb L: 73/97 MS: 5 CopyPart-ChangeByte-CrossOver-ShuffleBytes-EraseBytes-
+#291	REDUCE cov: 31 ft: 44 corp: 13/190b lim: 4096 exec/s: 0 rss: 31Mb L: 70/73 MS: 1 EraseBytes-
+#357	REDUCE cov: 31 ft: 44 corp: 13/189b lim: 4096 exec/s: 0 rss: 31Mb L: 1/73 MS: 1 EraseBytes-
+#368	NEW    cov: 33 ft: 46 corp: 14/192b lim: 4096 exec/s: 0 rss: 31Mb L: 3/73 MS: 1 InsertByte-
+#379	REDUCE cov: 33 ft: 46 corp: 14/187b lim: 4096 exec/s: 0 rss: 31Mb L: 68/70 MS: 1 EraseBytes-
+#381	NEW    cov: 34 ft: 47 corp: 15/195b lim: 4096 exec/s: 0 rss: 31Mb L: 8/70 MS: 2 InsertByte-CMP- DE: &#34;\000\000\000\000&#34;-
+#383	REDUCE cov: 34 ft: 47 corp: 15/194b lim: 4096 exec/s: 0 rss: 31Mb L: 2/70 MS: 2 ShuffleBytes-EraseBytes-
+#437	NEW    cov: 35 ft: 48 corp: 16/201b lim: 4096 exec/s: 0 rss: 31Mb L: 7/70 MS: 4 PersAutoDict-ShuffleBytes-EraseBytes-CMP- DE: &#34;\000\000\000\000&#34;-&#34;M\001\011\000&#34;-
+#464	REDUCE cov: 35 ft: 48 corp: 16/200b lim: 4096 exec/s: 0 rss: 31Mb L: 10/70 MS: 2 CrossOver-EraseBytes-
+#571	REDUCE cov: 36 ft: 49 corp: 17/202b lim: 4096 exec/s: 0 rss: 31Mb L: 2/70 MS: 2 ShuffleBytes-InsertByte-
+#575	REDUCE cov: 36 ft: 49 corp: 17/177b lim: 4096 exec/s: 0 rss: 31Mb L: 43/70 MS: 4 ShuffleBytes-CopyPart-PersAutoDict-EraseBytes- DE: &#34;M\001\011\000&#34;-
+#626	REDUCE cov: 37 ft: 50 corp: 18/180b lim: 4096 exec/s: 0 rss: 31Mb L: 3/70 MS: 1 CrossOver-
+#653	REDUCE cov: 38 ft: 51 corp: 19/182b lim: 4096 exec/s: 0 rss: 31Mb L: 2/70 MS: 2 ShuffleBytes-ChangeBit-
+#709	REDUCE cov: 38 ft: 51 corp: 19/163b lim: 4096 exec/s: 0 rss: 31Mb L: 24/70 MS: 1 EraseBytes-
+#733	REDUCE cov: 38 ft: 51 corp: 19/162b lim: 4096 exec/s: 0 rss: 31Mb L: 6/70 MS: 4 InsertByte-ChangeBinInt-EraseBytes-EraseBytes-
+#779	REDUCE cov: 38 ft: 51 corp: 19/155b lim: 4096 exec/s: 0 rss: 31Mb L: 63/63 MS: 1 EraseBytes-
+#785	REDUCE cov: 38 ft: 51 corp: 19/135b lim: 4096 exec/s: 0 rss: 31Mb L: 43/43 MS: 1 EraseBytes-
+#801	REDUCE cov: 38 ft: 51 corp: 19/134b lim: 4096 exec/s: 0 rss: 31Mb L: 5/43 MS: 1 EraseBytes-
+#802	REDUCE cov: 38 ft: 51 corp: 19/133b lim: 4096 exec/s: 0 rss: 31Mb L: 2/43 MS: 1 EraseBytes-
+#804	NEW    cov: 39 ft: 52 corp: 20/137b lim: 4096 exec/s: 0 rss: 31Mb L: 4/43 MS: 2 CrossOver-CMP- DE: &#34;P\002\005\000&#34;-
+#805	REDUCE cov: 39 ft: 52 corp: 20/127b lim: 4096 exec/s: 0 rss: 31Mb L: 14/43 MS: 1 EraseBytes-
+#842	REDUCE cov: 40 ft: 53 corp: 21/129b lim: 4096 exec/s: 0 rss: 31Mb L: 2/43 MS: 2 CMP-ChangeByte- DE: &#34;\001\000&#34;-
+#897	NEW    cov: 41 ft: 54 corp: 22/147b lim: 4096 exec/s: 0 rss: 31Mb L: 18/43 MS: 5 PersAutoDict-InsertByte-CopyPart-InsertByte-CMP- DE: &#34;\001\000&#34;-&#34;w\000\000\000\000\000\000\000&#34;-
+#908	REDUCE cov: 41 ft: 54 corp: 22/146b lim: 4096 exec/s: 0 rss: 31Mb L: 1/43 MS: 1 EraseBytes-
+#972	REDUCE cov: 41 ft: 54 corp: 22/141b lim: 4096 exec/s: 0 rss: 31Mb L: 38/38 MS: 4 InsertByte-ChangeBinInt-ChangeBit-EraseBytes-
+#979	NEW    cov: 43 ft: 56 corp: 23/142b lim: 4096 exec/s: 0 rss: 31Mb L: 1/38 MS: 2 ChangeByte-ChangeBit-
+#1075	NEW    cov: 44 ft: 57 corp: 24/148b lim: 4096 exec/s: 0 rss: 31Mb L: 6/38 MS: 1 ChangeByte-
+#1076	REDUCE cov: 45 ft: 58 corp: 25/158b lim: 4096 exec/s: 0 rss: 31Mb L: 10/38 MS: 1 ChangeByte-
+#1173	NEW    cov: 46 ft: 59 corp: 26/160b lim: 4096 exec/s: 0 rss: 31Mb L: 2/38 MS: 2 InsertByte-EraseBytes-
+#1184	REDUCE cov: 46 ft: 59 corp: 26/159b lim: 4096 exec/s: 0 rss: 31Mb L: 1/38 MS: 1 EraseBytes-
+#1220	NEW    cov: 47 ft: 60 corp: 27/161b lim: 4096 exec/s: 0 rss: 31Mb L: 2/38 MS: 1 CopyPart-
+#1271	REDUCE cov: 47 ft: 60 corp: 27/157b lim: 4096 exec/s: 0 rss: 31Mb L: 10/38 MS: 1 EraseBytes-
+#1346	NEW    cov: 47 ft: 63 corp: 28/182b lim: 4096 exec/s: 0 rss: 31Mb L: 25/38 MS: 5 ChangeBit-CrossOver-CopyPart-CrossOver-CrossOver-
+#1433	REDUCE cov: 47 ft: 63 corp: 28/181b lim: 4096 exec/s: 0 rss: 31Mb L: 1/38 MS: 2 CopyPart-EraseBytes-
+#1474	REDUCE cov: 47 ft: 63 corp: 28/180b lim: 4096 exec/s: 0 rss: 31Mb L: 9/38 MS: 1 EraseBytes-
+#1545	REDUCE cov: 47 ft: 63 corp: 28/178b lim: 4096 exec/s: 0 rss: 31Mb L: 3/38 MS: 1 EraseBytes-
+#1599	REDUCE cov: 47 ft: 63 corp: 28/177b lim: 4096 exec/s: 0 rss: 31Mb L: 5/38 MS: 4 PersAutoDict-ChangeByte-ShuffleBytes-EraseBytes- DE: &#34;\000\000\000\000&#34;-
+#1640	REDUCE cov: 47 ft: 63 corp: 28/172b lim: 4096 exec/s: 0 rss: 31Mb L: 5/38 MS: 1 EraseBytes-
+#1711	REDUCE cov: 47 ft: 63 corp: 28/171b lim: 4096 exec/s: 0 rss: 31Mb L: 3/38 MS: 1 EraseBytes-
+#1848	NEW    cov: 48 ft: 64 corp: 29/172b lim: 4096 exec/s: 0 rss: 31Mb L: 1/38 MS: 2 ChangeBit-ChangeBit-
+#1859	REDUCE cov: 48 ft: 64 corp: 29/171b lim: 4096 exec/s: 0 rss: 31Mb L: 4/38 MS: 1 EraseBytes-
+#1945	REDUCE cov: 48 ft: 64 corp: 29/170b lim: 4096 exec/s: 0 rss: 31Mb L: 2/38 MS: 1 EraseBytes-
+#1969	REDUCE cov: 49 ft: 65 corp: 30/177b lim: 4096 exec/s: 0 rss: 31Mb L: 7/38 MS: 4 InsertByte-PersAutoDict-PersAutoDict-InsertByte- DE: &#34;M\001\011\000&#34;-&#34;\001\000&#34;-
+#2157	REDUCE cov: 49 ft: 65 corp: 30/175b lim: 4096 exec/s: 0 rss: 31Mb L: 3/38 MS: 3 InsertByte-ShuffleBytes-EraseBytes-
+#2198	REDUCE cov: 49 ft: 65 corp: 30/174b lim: 4096 exec/s: 0 rss: 31Mb L: 6/38 MS: 1 EraseBytes-
+#2240	REDUCE cov: 49 ft: 65 corp: 30/173b lim: 4096 exec/s: 0 rss: 31Mb L: 5/38 MS: 2 InsertByte-EraseBytes-
+#2288	REDUCE cov: 49 ft: 65 corp: 30/172b lim: 4096 exec/s: 0 rss: 31Mb L: 2/38 MS: 3 CopyPart-ChangeBinInt-EraseBytes-
+#2311	REDUCE cov: 49 ft: 65 
+...truncated...
+m: 4096 exec/s: 89783 rss: 66Mb L: 668/3836 MS: 1 EraseBytes-
+#2604126	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 89797 rss: 66Mb L: 130/3836 MS: 1 EraseBytes-
+#2604757	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 89819 rss: 66Mb L: 69/3836 MS: 1 EraseBytes-
+#2608660	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 89953 rss: 66Mb L: 57/3836 MS: 3 ShuffleBytes-CopyPart-EraseBytes-
+#2609520	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 89983 rss: 66Mb L: 67/3836 MS: 5 ChangeBinInt-ChangeASCIIInt-ChangeByte-ChangeBinInt-EraseBytes-
+#2614176	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 90144 rss: 66Mb L: 640/3836 MS: 1 EraseBytes-
+#2618887	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 90306 rss: 66Mb L: 474/3836 MS: 1 EraseBytes-
+#2619739	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 90335 rss: 66Mb L: 3828/3828 MS: 2 InsertRepeatedBytes-EraseBytes-
+#2621386	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 90392 rss: 66Mb L: 108/3828 MS: 2 CopyPart-EraseBytes-
+#2622707	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 90438 rss: 66Mb L: 1426/3828 MS: 1 EraseBytes-
+#2629445	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 87648 rss: 66Mb L: 25/3828 MS: 3 InsertByte-ChangeASCIIInt-EraseBytes-
+#2630496	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 87683 rss: 66Mb L: 205/3828 MS: 1 EraseBytes-
+#2631933	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 87731 rss: 66Mb L: 26/3828 MS: 2 ChangeByte-EraseBytes-
+#2632624	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 87754 rss: 66Mb L: 69/3828 MS: 1 EraseBytes-
+#2634336	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 87811 rss: 66Mb L: 152/3828 MS: 2 ShuffleBytes-EraseBytes-
+#2634587	REDUCE cov: 206 ft: 856 corp: 285/52Kb lim: 4096 exec/s: 87819 rss: 66Mb L: 21/3828 MS: 1 EraseBytes-
+#2637639	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 87921 rss: 66Mb L: 599/3828 MS: 2 ChangeByte-EraseBytes-
+#2638366	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 87945 rss: 66Mb L: 30/3828 MS: 2 ChangeASCIIInt-EraseBytes-
+#2638422	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 87947 rss: 66Mb L: 67/3828 MS: 1 EraseBytes-
+#2639373	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 87979 rss: 66Mb L: 449/3828 MS: 1 EraseBytes-
+#2642554	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88085 rss: 66Mb L: 225/3828 MS: 1 EraseBytes-
+#2645255	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88175 rss: 66Mb L: 238/3828 MS: 1 EraseBytes-
+#2645431	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88181 rss: 66Mb L: 65/3828 MS: 1 EraseBytes-
+#2646553	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88218 rss: 66Mb L: 555/3828 MS: 2 ChangeBit-EraseBytes-
+#2648796	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88293 rss: 66Mb L: 640/3828 MS: 3 PersAutoDict-ChangeASCIIInt-EraseBytes- DE: &#34;w\000\000\000\000\000\000\000&#34;-
+#2648957	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88298 rss: 66Mb L: 36/3828 MS: 1 EraseBytes-
+#2651803	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88393 rss: 66Mb L: 2083/3828 MS: 1 EraseBytes-
+#2651959	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88398 rss: 66Mb L: 538/3828 MS: 1 EraseBytes-
+#2656666	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88555 rss: 66Mb L: 520/3828 MS: 2 CopyPart-EraseBytes-
+#2656725	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88557 rss: 66Mb L: 35/3828 MS: 4 CrossOver-ChangeByte-PersAutoDict-EraseBytes- DE: &#34;\377\377\377\005&#34;-
+#2659578	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88652 rss: 66Mb L: 1018/3828 MS: 3 ChangeASCIIInt-ShuffleBytes-EraseBytes-
+#2660484	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88682 rss: 66Mb L: 1413/3828 MS: 1 EraseBytes-
+#2662021	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88734 rss: 66Mb L: 417/3828 MS: 2 ChangeBit-EraseBytes-
+#2662248	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88741 rss: 66Mb L: 23/3828 MS: 2 ShuffleBytes-EraseBytes-
+#2663524	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88784 rss: 66Mb L: 64/3828 MS: 1 EraseBytes-
+#2664242	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88808 rss: 66Mb L: 98/3828 MS: 3 ChangeASCIIInt-ChangeBinInt-EraseBytes-
+#2666709	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88890 rss: 66Mb L: 35/3828 MS: 2 ChangeBinInt-EraseBytes-
+#2667015	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88900 rss: 66Mb L: 193/3828 MS: 1 EraseBytes-
+#2668406	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 88946 rss: 66Mb L: 62/3828 MS: 1 EraseBytes-
+#2671072	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89035 rss: 66Mb L: 27/3828 MS: 1 EraseBytes-
+#2672018	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89067 rss: 66Mb L: 519/3828 MS: 1 EraseBytes-
+#2672754	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89091 rss: 66Mb L: 629/3828 MS: 1 EraseBytes-
+#2676385	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89212 rss: 66Mb L: 1244/3828 MS: 1 EraseBytes-
+#2683436	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89447 rss: 66Mb L: 479/3828 MS: 1 EraseBytes-
+#2685542	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89518 rss: 66Mb L: 1242/3828 MS: 1 EraseBytes-
+#2686498	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89549 rss: 66Mb L: 212/3828 MS: 1 EraseBytes-
+#2687182	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89572 rss: 66Mb L: 32/3828 MS: 4 ChangeBinInt-CopyPart-ShuffleBytes-EraseBytes-
+#2691603	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89720 rss: 66Mb L: 81/3828 MS: 1 EraseBytes-
+#2692495	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89749 rss: 66Mb L: 425/3828 MS: 2 ShuffleBytes-EraseBytes-
+#2692781	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89759 rss: 66Mb L: 203/3828 MS: 1 EraseBytes-
+#2697508	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89916 rss: 66Mb L: 100/3828 MS: 2 ChangeBit-EraseBytes-
+#2698214	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 89940 rss: 66Mb L: 1371/3828 MS: 1 EraseBytes-
+#2700260	REDUCE cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 90008 rss: 66Mb L: 200/3828 MS: 1 EraseBytes-
+#2700825	DONE   cov: 206 ft: 856 corp: 285/51Kb lim: 4096 exec/s: 87123 rss: 66Mb
+###### Recommended dictionary. ######
+&#34;\000\000\000\000&#34; # Uses: 14420
+&#34;M\001\011\000&#34; # Uses: 14386
+&#34;P\002\005\000&#34; # Uses: 14300
+&#34;\001\000&#34; # Uses: 16195
+&#34;w\000\000\000\000\000\000\000&#34; # Uses: 13222
+&#34;\001\000\000\000\000\000\000\000&#34; # Uses: 12925
+&#34;\001\000\000\003&#34; # Uses: 13858
+&#34;\000\000\000\000\000\000\000\000&#34; # Uses: 4952
+&#34;\377\377\377\005&#34; # Uses: 4875
+&#34;\010\000\000\000\000\000\000\000&#34; # Uses: 4931
+&#34;\001\000\000\000\000\000\001S&#34; # Uses: 4912
+&#34;\377\377\377:&#34; # Uses: 4925
+&#34;#\000\000\000&#34; # Uses: 4894
+&#34;\000\021&#34; # Uses: 4827
+&#34;\377\377\377\377\377\377\377\013&#34; # Uses: 4904
+&#34;\000\000\000\003&#34; # Uses: 4723
+&#34;\006\000\000\000&#34; # Uses: 4838
+&#34;\030\000\000\000\000\000\000\000&#34; # Uses: 4729
+&#34;\377\377\377\377\377\377\377\377&#34; # Uses: 4800
+&#34;\377\011&#34; # Uses: 4647
+&#34;\001\000\000\000\000\000\000\001&#34; # Uses: 4668
+&#34;:\000\000\000&#34; # Uses: 4669
+&#34;\026\000\000\000&#34; # Uses: 4658
+&#34;\001;&#34; # Uses: 4525
+&#34;\000@\001\000&#34; # Uses: 4466
+&#34;\001@\001\000&#34; # Uses: 4520
+&#34;\032\000\000\000\000\000\000\000&#34; # Uses: 4358
+&#34;\377?\001\000\000\000\000\000&#34; # Uses: 4471
+&#34;\001\000\000\000\000\000\000r&#34; # Uses: 4419
+&#34;\000\000\000=&#34; # Uses: 4133
+&#34;\001\000\000\024&#34; # Uses: 4186
+&#34;\377\000@\000&#34; # Uses: 4090
+&#34;\000\002&#34; # Uses: 3265
+&#34;\000\000\000\012&#34; # Uses: 2665
+&#34;\001\000\000\000\000\000\000\005&#34; # Uses: 2592
+&#34;\031\000\000\000&#34; # Uses: 2558
+&#34;\001\004&#34; # Uses: 2423
+&#34;\377\377&#34; # Uses: 1420
+&#34;\377\377\002\363&#34; # Uses: 898
+###### End of recommended dictionary. ######
+Done 2700825 runs in 31 second(s)
+stat::number_of_executed_units: 2700825
+stat::average_exec_per_sec:     87123
+stat::new_units_added:          2657
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              66
+
+</pre>
+
+
+</body>
