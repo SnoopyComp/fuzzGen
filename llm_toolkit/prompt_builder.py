@@ -37,7 +37,7 @@ DEFAULT_TEMPLATE_DIR: str = 'prompts/template_xml/'
 
 # TODO(Dongge): Refactor this tot avoid hard-coding.
 # Example files.
-EXAMPLE_PATH = os.path.join('prompts', 'example','libtiff')
+EXAMPLE_PATH = os.path.join('prompts', 'example','libraw_bad')
 # Example with FuzzeDataProvider.
 FDP_EXAMPLE_1_PROBLEM = os.path.join(EXAMPLE_PATH, 'gdImageString-problem.txt')
 FDP_EXAMPLE_1_SOLUTION = os.path.join(EXAMPLE_PATH, 'gdImageString-solution.cc')

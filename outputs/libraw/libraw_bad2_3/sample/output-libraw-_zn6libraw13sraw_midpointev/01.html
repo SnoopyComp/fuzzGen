@@ -1,0 +1,376 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Experiment results</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html {
+    line-height: 1.15;
+}
+
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+}
+
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+td, th {
+    border-right: 1px #dedede solid;
+    border-bottom: 1px #dedede solid;
+    padding: 5px;
+    text-align: left;
+}
+td:first-child, th:first-child {
+    border-left: 1px #dedede solid;
+}
+th {
+    border-top: 1px #dedede solid;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #f4f5ff;
+}
+</style>
+<body>
+    LLM: 
+    
+<h1>output-libraw-_zn6libraw13sraw_midpointev / 01</h1>
+Bug: False
+<br>
+Crash reason: NO_SEMANTIC_ERR
+<br>
+<br>
+
+
+
+
+
+
+
+
+
+<h3>Final code</h3>
+
+<pre>
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34; // Correct path for the LibRaw header file
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create an instance of LibRaw
+    LibRaw libraw_instance;
+
+    // Set up the necessary fields in libraw_instance to ensure sraw_midpoint() is meaningfully invoked
+    // For example, we can set up the rawdata.sizes structure
+    libraw_instance.imgdata.sizes.raw_width = fuzzed_data.ConsumeIntegral&lt;uint16_t&gt;();
+    libraw_instance.imgdata.sizes.raw_height = fuzzed_data.ConsumeIntegral&lt;uint16_t&gt;();
+
+    // Ensure the rawdata.raw_image is allocated and populated with some data
+    int raw_image_size = libraw_instance.imgdata.sizes.raw_width * libraw_instance.imgdata.sizes.raw_height;
+    if (raw_image_size &gt; 0 &amp;&amp; raw_image_size * sizeof(ushort) &lt;= fuzzed_data.remaining_bytes()) {
+        libraw_instance.imgdata.rawdata.raw_image = new ushort[raw_image_size];
+        for (int i = 0; i &lt; raw_image_size; ++i) {
+            libraw_instance.imgdata.rawdata.raw_image[i] = fuzzed_data.ConsumeIntegral&lt;ushort&gt;();
+        }
+    } else {
+        // If the size is invalid, clean up and return
+        return 0;
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up allocated memory
+    delete[] libraw_instance.imgdata.rawdata.raw_image;
+
+    // Return the result of the function call
+    return result;
+}
+</pre>
+
+
+<h3>Fixer prompt #1</h3>
+<pre>
+
+Given the following C++ fuzz harness and its build error message, fix the code to make it build for fuzzing.
+
+If there is undeclared identifier or unknown type name error, fix it by finding and including the related libraries.
+
+MUST RETURN THE FULL CODE, INCLUDING UNCHANGED PARTS.
+
+Below is the code needs to be built:
+&lt;code&gt;
+&lt;solution&gt;
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34; // Correct path for the LibRaw header file
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create an instance of LibRaw
+    LibRaw libraw_instance;
+
+    // Set up the necessary fields in libraw_instance to ensure sraw_midpoint() is meaningfully invoked
+    // For example, we can set up the rawdata.sizes structure
+    libraw_instance.imgdata.sizes.raw_width = fuzzed_data.ConsumeIntegral&lt;uint16_t&gt;();
+    libraw_instance.imgdata.sizes.raw_height = fuzzed_data.ConsumeIntegral&lt;uint16_t&gt;();
+
+    // Ensure the rawdata.raw_image is allocated and populated with some data
+    int raw_image_size = libraw_instance.imgdata.sizes.raw_width * libraw_instance.imgdata.sizes.raw_height;
+    if (raw_image_size &gt; 0 &amp;&amp; raw_image_size * sizeof(ushort) &lt;= fuzzed_data.remaining_bytes()) {
+        libraw_instance.imgdata.rawdata.raw_image = new ushort[raw_image_size];
+        for (int i = 0; i &lt; raw_image_size; ++i) {
+            libraw_instance.imgdata.rawdata.raw_image[i] = fuzzed_data.ConsumeIntegral&lt;ushort&gt;();
+        }
+    } else {
+        // If the size is invalid, clean up and return
+        return 0;
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up allocated memory
+    delete[] libraw_instance.imgdata.rawdata.raw_image;
+
+    // Return the result of the function call
+    return result;
+}
+&lt;/code&gt;
+
+Below is the error to fix:
+The code has the following build issues:
+&lt;error&gt;
+/src/libraw_fuzzer.cc:1:1: error: expected unqualified-id
+    1 | &lt;solution&gt;
+      | ^
+&lt;/error&gt;
+
+
+
+
+Fix code:
+1. Consider possible solutions for the issues listed above.
+2. Choose a solution that can maximize fuzzing result, which is utilizing the function under test and feeding it not null input.
+3. Apply the solutions to the original code.
+It&#39;s important to show the complete code, not only the fixed line.
+&lt;solution&gt;
+</pre>
+
+
+
+<h3>Code #1</h3>
+
+<pre>
+Certainly! Below is the corrected and complete code for the fuzz harness:
+
+```cpp
+#include &lt;fuzzer/FuzzedDataProvider.h&gt;
+#include &#34;/src/libraw/libraw/libraw.h&#34; // Correct path for the LibRaw header file
+
+extern &#34;C&#34; int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    // Initialize FuzzedDataProvider with the input data
+    FuzzedDataProvider fuzzed_data(data, size);
+
+    // Create an instance of LibRaw
+    LibRaw libraw_instance;
+
+    // Set up the necessary fields in libraw_instance to ensure sraw_midpoint() is meaningfully invoked
+    // For example, we can set up the rawdata.sizes structure
+    libraw_instance.imgdata.sizes.raw_width = fuzzed_data.ConsumeIntegral&lt;uint16_t&gt;();
+    libraw_instance.imgdata.sizes.raw_height = fuzzed_data.ConsumeIntegral&lt;uint16_t&gt;();
+
+    // Ensure the rawdata.raw_image is allocated and populated with some data
+    int raw_image_size = libraw_instance.imgdata.sizes.raw_width * libraw_instance.imgdata.sizes.raw_height;
+    if (raw_image_size &gt; 0 &amp;&amp; raw_image_size * sizeof(ushort) &lt;= fuzzed_data.remaining_bytes()) {
+        libraw_instance.imgdata.rawdata.raw_image = new ushort[raw_image_size];
+        for (int i = 0; i &lt; raw_image_size; ++i) {
+            libraw_instance.imgdata.rawdata.raw_image[i] = fuzzed_data.ConsumeIntegral&lt;ushort&gt;();
+        }
+    } else {
+        // If the size is invalid, clean up and return
+        return 0;
+    }
+
+    // Call the function-under-test
+    int result = libraw_instance.sraw_midpoint();
+
+    // Clean up allocated memory
+    delete[] libraw_instance.imgdata.rawdata.raw_image;
+
+    // Return the result of the function call
+    return result;
+}
+```
+
+The changes made:
+1. Removed the `&lt;solution&gt;` tags that were causing the syntax error.
+2. Ensured the code is complete and ready to be used as a fuzz harness.
+
+This should resolve the build error and allow the code to be compiled for fuzzing.
+</pre>
+
+
+<h2>Logs</h2>
+<pre>
+Fixing /home/hyunchang/Desktop/oss-fuzz-gen/results/libraw/libraw_bad2_3/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o, attempt 1.
+Successfully built /home/hyunchang/Desktop/oss-fuzz-gen/results/libraw/libraw_bad2_3/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o in 1 iterations of fixing.
+Triaging the crash related to /home/hyunchang/Desktop/oss-fuzz-gen/results/libraw/libraw_bad2_3/output-libraw-_zn6libraw13sraw_midpointev/fixed_targets/01.cc with gpt-4o.
+Warning: no crash info in libraw-zn6libraw13sraw_midpointev-01.
+Result for libraw-zn6libraw13sraw_midpointev-01: crashes=False, coverage=0.002830936473785528 (50/17662), coverage diff=0.00018951187156509734 (7/36937)
+
+</pre>
+
+<h2>Run logs</h2>
+<pre>
+INFO:__main__:Running: docker run --privileged --shm-size=2g --platform linux/amd64 --rm -e FUZZING_ENGINE=libfuzzer -e SANITIZER=address -e RUN_FUZZER_MODE=interactive -e HELPER=True -v /home/hyunchang/Desktop/oss-fuzz-gen/results/libraw/libraw_bad2_3/output-libraw-_zn6libraw13sraw_midpointev/corpora/01.cc:/tmp/libraw_cr2_fuzzer_corpus -v /tmp/tmpxshc_405/build/out/libraw-zn6libraw13sraw_midpointev-01:/out -t gcr.io/oss-fuzz-base/base-runner run_fuzzer libraw_cr2_fuzzer -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30.
+vm.mmap_rnd_bits = 28
+rm: cannot remove &#39;/tmp/libraw_cr2_fuzzer_corpus&#39;: Device or resource busy
+Using seed corpus: libraw_cr2_fuzzer_seed_corpus.zip
+/out/libraw_cr2_fuzzer -rss_limit_mb=2560 -timeout=25 -print_final_stats=1 -max_total_time=30 -len_control=0 -timeout=30 /tmp/libraw_cr2_fuzzer_corpus &lt; /dev/null
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 4162684136
+INFO: Loaded 1 modules   (17662 inline 8-bit counters): 17662 [0x563219bd9328, 0x563219bdd826), 
+INFO: Loaded 1 PC tables (17662 PCs): 17662 [0x563219bdd828,0x563219c22808), 
+INFO:        3 files found in /tmp/libraw_cr2_fuzzer_corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 1048576 bytes
+INFO: seed corpus: files: 3 min: 6884212b max: 12304199b total: 27614165b rss: 33Mb
+#4	INITED cov: 42 ft: 43 corp: 1/1024Kb exec/s: 0 rss: 43Mb
+#10	REDUCE cov: 42 ft: 43 corp: 1/370Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 378964/378964 MS: 1 CrossOver-
+#16	REDUCE cov: 42 ft: 43 corp: 1/247Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 253495/253495 MS: 1 EraseBytes-
+#26	REDUCE cov: 42 ft: 43 corp: 1/213Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 218829/218829 MS: 5 ChangeBit-ChangeBinInt-ChangeBit-ChangeBit-EraseBytes-
+#47	REDUCE cov: 42 ft: 43 corp: 1/148Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 152027/152027 MS: 1 EraseBytes-
+#61	REDUCE cov: 42 ft: 43 corp: 1/126Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 129616/129616 MS: 4 ChangeBinInt-ChangeBinInt-ChangeASCIIInt-EraseBytes-
+#65	REDUCE cov: 42 ft: 43 corp: 1/72Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 74206/74206 MS: 4 InsertByte-CrossOver-ChangeBit-EraseBytes-
+#80	REDUCE cov: 42 ft: 43 corp: 1/41Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 42201/42201 MS: 5 InsertRepeatedBytes-CopyPart-ChangeBinInt-ShuffleBytes-EraseBytes-
+#94	REDUCE cov: 42 ft: 43 corp: 1/39Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 40265/40265 MS: 4 CopyPart-InsertRepeatedBytes-ChangeBinInt-EraseBytes-
+#96	REDUCE cov: 42 ft: 43 corp: 1/31Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 32340/32340 MS: 2 ShuffleBytes-EraseBytes-
+#100	REDUCE cov: 42 ft: 43 corp: 1/25Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 26246/26246 MS: 4 ShuffleBytes-ChangeASCIIInt-InsertByte-EraseBytes-
+#110	REDUCE cov: 42 ft: 43 corp: 1/19Kb lim: 1048576 exec/s: 0 rss: 47Mb L: 20327/20327 MS: 5 ChangeByte-InsertRepeatedBytes-InsertRepeatedBytes-ChangeByte-EraseBytes-
+#113	REDUCE cov: 42 ft: 43 corp: 1/11355b lim: 1048576 exec/s: 0 rss: 47Mb L: 11355/11355 MS: 3 ChangeBit-ChangeASCIIInt-EraseBytes-
+#116	REDUCE cov: 42 ft: 43 corp: 1/10588b lim: 1048576 exec/s: 0 rss: 47Mb L: 10588/10588 MS: 3 ChangeASCIIInt-CrossOver-EraseBytes-
+#130	REDUCE cov: 42 ft: 43 corp: 1/8187b lim: 1048576 exec/s: 0 rss: 47Mb L: 8187/8187 MS: 4 ChangeASCIIInt-InsertRepeatedBytes-ChangeASCIIInt-EraseBytes-
+#136	REDUCE cov: 42 ft: 43 corp: 1/5264b lim: 1048576 exec/s: 0 rss: 47Mb L: 5264/5264 MS: 1 EraseBytes-
+#138	REDUCE cov: 42 ft: 43 corp: 1/3810b lim: 1048576 exec/s: 0 rss: 47Mb L: 3810/3810 MS: 2 ChangeByte-EraseBytes-
+#139	REDUCE cov: 42 ft: 43 corp: 1/1915b lim: 1048576 exec/s: 0 rss: 47Mb L: 1915/1915 MS: 1 EraseBytes-
+#140	REDUCE cov: 42 ft: 43 corp: 1/1264b lim: 1048576 exec/s: 0 rss: 47Mb L: 1264/1264 MS: 1 EraseBytes-
+#145	REDUCE cov: 42 ft: 43 corp: 1/812b lim: 1048576 exec/s: 0 rss: 47Mb L: 812/812 MS: 5 CopyPart-CrossOver-InsertByte-ChangeASCIIInt-EraseBytes-
+#146	REDUCE cov: 42 ft: 43 corp: 1/544b lim: 1048576 exec/s: 0 rss: 47Mb L: 544/544 MS: 1 EraseBytes-
+#162	REDUCE cov: 42 ft: 43 corp: 1/314b lim: 1048576 exec/s: 0 rss: 47Mb L: 314/314 MS: 1 EraseBytes-
+#169	REDUCE cov: 42 ft: 43 corp: 1/217b lim: 1048576 exec/s: 0 rss: 47Mb L: 217/217 MS: 2 ChangeBinInt-EraseBytes-
+#173	REDUCE cov: 42 ft: 43 corp: 1/115b lim: 1048576 exec/s: 0 rss: 47Mb L: 115/115 MS: 4 CrossOver-InsertByte-InsertByte-EraseBytes-
+#180	REDUCE cov: 42 ft: 43 corp: 1/71b lim: 1048576 exec/s: 0 rss: 47Mb L: 71/71 MS: 2 ChangeByte-EraseBytes-
+#188	REDUCE cov: 42 ft: 43 corp: 1/70b lim: 1048576 exec/s: 0 rss: 47Mb L: 70/70 MS: 3 ChangeASCIIInt-InsertByte-EraseBytes-
+#198	REDUCE cov: 42 ft: 43 corp: 1/53b lim: 1048576 exec/s: 0 rss: 47Mb L: 53/53 MS: 5 ShuffleBytes-CopyPart-CrossOver-ChangeBit-EraseBytes-
+#199	REDUCE cov: 42 ft: 43 corp: 1/44b lim: 1048576 exec/s: 0 rss: 47Mb L: 44/44 MS: 1 EraseBytes-
+#216	REDUCE cov: 42 ft: 43 corp: 1/30b lim: 1048576 exec/s: 0 rss: 47Mb L: 30/30 MS: 2 ChangeBinInt-EraseBytes-
+#257	REDUCE cov: 42 ft: 43 corp: 1/28b lim: 1048576 exec/s: 0 rss: 47Mb L: 28/28 MS: 1 EraseBytes-
+#295	REDUCE cov: 42 ft: 43 corp: 1/17b lim: 1048576 exec/s: 0 rss: 47Mb L: 17/17 MS: 3 ChangeByte-ChangeByte-EraseBytes-
+#305	REDUCE cov: 42 ft: 43 corp: 1/13b lim: 1048576 exec/s: 0 rss: 47Mb L: 13/13 MS: 5 InsertByte-InsertByte-ShuffleBytes-ChangeByte-EraseBytes-
+#307	REDUCE cov: 43 ft: 44 corp: 2/100b lim: 1048576 exec/s: 0 rss: 47Mb L: 87/87 MS: 2 ChangeByte-InsertRepeatedBytes-
+#308	REDUCE cov: 43 ft: 44 corp: 2/99b lim: 1048576 exec/s: 0 rss: 47Mb L: 12/87 MS: 1 EraseBytes-
+#309	REDUCE cov: 43 ft: 44 corp: 2/61b lim: 1048576 exec/s: 0 rss: 47Mb L: 49/49 MS: 1 EraseBytes-
+#350	REDUCE cov: 43 ft: 44 corp: 2/55b lim: 1048576 exec/s: 0 rss: 47Mb L: 6/49 MS: 1 EraseBytes-
+#366	REDUCE cov: 43 ft: 44 corp: 2/54b lim: 1048576 exec/s: 0 rss: 47Mb L: 5/49 MS: 1 EraseBytes-
+#367	REDUCE cov: 43 ft: 45 corp: 3/57b lim: 1048576 exec/s: 0 rss: 47Mb L: 3/49 MS: 1 EraseBytes-
+#390	REDUCE cov: 43 ft: 45 corp: 3/49b lim: 1048576 exec/s: 0 rss: 47Mb L: 41/41 MS: 3 ChangeByte-ChangeBinInt-EraseBytes-
+#401	REDUCE cov: 43 ft: 45 corp: 3/31b lim: 1048576 exec/s: 0 rss: 47Mb L: 23/23 MS: 1 EraseBytes-
+#417	REDUCE cov: 43 ft: 45 corp: 3/20b lim: 1048576 exec/s: 0 rss: 47Mb L: 12/12 MS: 1 EraseBytes-
+#425	REDUCE cov: 43 ft: 45 corp: 3/19b lim: 1048576 exec/s: 0 rss: 47Mb L: 4/12 MS: 3 ShuffleBytes-InsertByte-EraseBytes-
+#432	NEW    cov: 43 ft: 46 corp: 4/21b lim: 1048576 exec/s: 0 rss: 47Mb L: 2/12 MS: 2 ChangeByte-EraseBytes-
+#474	REDUCE cov: 43 ft: 46 corp: 4/20b lim: 1048576 exec/s: 0 rss: 47Mb L: 11/11 MS: 2 InsertByte-EraseBytes-
+#501	REDUCE cov: 43 ft: 46 corp: 4/19b lim: 1048576 exec/s: 0 rss: 47Mb L: 10/10 MS: 2 ShuffleBytes-EraseBytes-
+#593	REDUCE cov: 43 ft: 46 corp: 4/18b lim: 1048576 exec/s: 0 rss: 47Mb L: 9/9 MS: 2 ChangeByte-EraseBytes-
+#605	NEW    cov: 43 ft: 47 corp: 5/19b lim: 1048576 exec/s: 0 rss: 47Mb L: 1/9 MS: 2 ChangeBit-EraseBytes-
+#611	REDUCE cov: 43 ft: 47 corp: 5/16b lim: 1048576 exec/s: 0 rss: 47Mb L: 6/6 MS: 1 EraseBytes-
+#878	REDUCE cov: 43 ft: 47 corp: 5/15b lim: 1048576 exec/s: 0 rss: 47Mb L: 1/6 MS: 2 ShuffleBytes-EraseBytes-
+#1058	REDUCE cov: 43 ft: 47 corp: 5/11b lim: 1048576 exec/s: 0 rss: 47Mb L: 2/4 MS: 5 ShuffleBytes-EraseBytes-ChangeByte-ChangeByte-EraseBytes-
+#1126	REDUCE cov: 43 ft: 47 corp: 5/10b lim: 1048576 exec/s: 0 rss: 47Mb L: 1/4 MS: 3 CrossOver-ChangeBit-EraseBytes-
+	NEW_FUNC[1/1]: 0x563219922410 in LibRaw::sraw_midpoint() /src/libraw/src/utils/utils_libraw.cpp:247
+#2131	NEW    cov: 50 ft: 54 corp: 6/139b lim: 1048576 exec/s: 0 rss: 47Mb L: 129/129 MS: 5 CrossOver-CrossOver-ChangeBit-InsertRepeatedBytes-CopyPart-
+#2291	REDUCE cov: 50 ft: 54 corp: 6/137b lim: 1048576 exec/s: 0 rss: 47Mb L: 127/127 MS: 5 InsertByte-InsertByte-InsertRepeatedBytes-InsertByte-EraseBytes-
+#2399	REDUCE cov: 50 ft: 54 corp: 6/117b lim: 1048576 exec/s: 0 rss: 47Mb L: 107/107 MS: 3 ChangeBit-ChangeBinInt-EraseBytes-
+#4348	REDUCE cov: 50 ft: 54 corp: 6/116b lim: 1048576 exec/s: 0 rss: 47Mb L: 106/106 MS: 4 ChangeByte-ShuffleBytes-ChangeByte-EraseBytes-
+#4588	REDUCE cov: 50 ft: 58 corp: 7/329b lim: 1048576 exec/s: 0 rss: 47Mb L: 213/213 MS: 5 InsertByte-ChangeByte-ChangeBinInt-ShuffleBytes-CrossOver-
+#4842	REDUCE cov: 50 ft: 58 corp: 7/289b lim: 1048576 exec/s: 0 rss: 47Mb L: 173/173 MS: 4 CopyPart-CopyPart-ChangeBit-EraseBytes-
+#4854	REDUCE cov: 50 ft: 58 corp: 7/229b lim: 1048576 exec/s: 0 rss: 47Mb L: 113/113 MS: 2 ChangeByte-EraseBytes-
+#4862	REDUCE cov: 50 ft: 58 corp: 7/202b lim: 1048576 exec/s: 0 rss: 47Mb L: 86/106 MS: 3 CrossOver-ChangeBinInt-EraseBytes-
+#4928	REDUCE cov: 50 ft: 58 corp: 7/201b lim: 1048576 exec/s: 0 rss: 47Mb L: 85/106 MS: 1 EraseBytes-
+#5017	REDUCE cov: 50 ft: 58 corp: 7/168b lim: 1048576 exec/s: 0 rss: 47Mb L: 52/106 MS: 4 ChangeBit-ChangeASCIIInt-CMP-EraseBytes- DE: &#34;b5\312\016\000\000\000\000&#34;-
+#5023	REDUCE cov: 50 ft: 58 corp: 7/142b lim: 1048576 exec/s: 0 rss: 47Mb L: 26/106 MS: 1 EraseBytes-
+#5230	REDUCE cov: 50 ft: 62 corp: 8/168b lim: 1048576 exec/s: 0 rss: 47Mb L: 26/106 MS: 2 ChangeBit-ChangeBit-
+#5241	REDUCE cov: 50 ft: 62 corp: 8/159b lim: 1048576 exec/s: 0 rss: 47Mb L: 17/106 MS: 1 EraseBytes-
+#5266	REDUCE cov: 50 ft: 62 corp: 8/156b lim: 1048576 exec/s: 0 rss: 47Mb L: 14/106 MS: 5 CopyPart-CrossOver-ChangeASCIIInt-ChangeBinInt-EraseBytes-
+#5267	REDUCE cov: 50 ft: 62 corp: 8/153b lim: 1048576 exec/s: 0 rss: 47Mb L: 11/106 MS: 1 EraseBytes-
+#5553	REDUCE cov: 50 ft: 62 corp: 8/152b lim: 1048576 exec/s: 0 rss: 47Mb L: 10/106 MS: 1 EraseBytes-
+#5927	REDUCE cov: 50 ft: 62 corp: 8/150b lim: 1048576 exec/s: 0 rss: 47Mb L: 24/106 MS: 4 ChangeBinInt-CopyPart-ChangeByte-EraseBytes-
+#6613	REDUCE cov: 50 ft: 62 corp: 8/149b lim: 1048576 exec/s: 6613 rss: 47Mb L: 23/106 MS: 1 EraseBytes-
+#7163	REDUCE cov: 50 ft: 66 corp: 9/172b lim: 1048576 exec/s: 7163 rss: 47Mb L: 23/106 MS: 1 ChangeBit-
+#7985	REDUCE cov: 50 ft: 66 corp: 9/170b lim: 1048576 exec/s: 7985 rss: 47Mb L: 21/106 MS: 2 ShuffleBytes-EraseBytes-
+#7999	REDUCE cov: 50 ft: 66 corp: 9/168b lim: 1048576 exec/s: 7999 rss: 47Mb L: 19/106 MS: 4 InsertByte-ShuffleBytes-EraseBytes-CopyPart-
+#8456	REDUCE cov: 50 ft: 66 corp: 9/167b lim: 1048576 exec/s: 8456 rss: 47Mb L: 18/106 MS: 2 ChangeBit-EraseBytes-
+#9041	REDUCE cov: 50 ft: 66 corp: 9/166b lim: 1048576 exec/s: 9041 rss: 47Mb L: 17/106 MS: 5 ShuffleBytes-ShuffleBytes-CopyPart-PersAutoDict-EraseBytes- DE: &#34;b5\312\016\000\000\000\000&#34;-
+#9316	REDUCE cov: 50 ft: 66 corp: 9/165b lim: 1048576 exec/s: 9316 rss: 47Mb L: 22/106 MS: 5 InsertByte-EraseBytes-ChangeBinInt-ShuffleBytes-PersAutoDict- DE: &#34;b5\312\016\000\000\000\000&#34;-
+#9758	REDUCE cov: 50 ft: 67 corp: 10/190b lim: 1048576 exec/s: 9758 rss: 47Mb L: 25/106 MS: 2 CopyPart-CopyPart-
+#10019	REDUCE cov: 50 ft: 67 corp: 10/189b lim: 1048576 exec/s: 10019 rss: 47Mb L: 24/106 MS: 1 EraseBytes-
+#10406	REDUCE cov: 50 ft: 67 corp: 10/187b lim: 1048576 exec/s: 10406 rss: 47Mb L: 22/106 MS: 2 CopyPart-EraseBytes-
+#10433	REDUCE cov: 50 ft: 67 corp: 10/180b lim: 1048576 exec/s: 10433 rss: 47Mb L: 15/106 MS: 2 ChangeBinInt-EraseBytes-
+#10439	REDUCE cov: 50 ft: 67 corp: 10/179b lim: 1048576 exec/s: 10439 rss: 47Mb L: 14/106 MS: 1 EraseBytes-
+#10530	REDUCE cov: 50 ft: 69 corp: 11/271b lim: 1048576 exec/s: 10530 rss: 47Mb L: 92/106 MS: 1 EraseBytes-
+#10691	REDUCE cov: 50 ft: 69 corp: 11/267b lim: 1048576 exec/s: 10691 rss: 47Mb L: 88/106 MS: 1 EraseBytes-
+#10878	REDUCE cov: 50 ft: 69 corp: 11/266b lim: 1048576 exec/s: 10878 rss: 47Mb L: 13/106 MS: 2 InsertByte-EraseBytes-
+#10999	REDUCE cov: 50 ft: 69 corp: 11/236b lim: 1048576 exec/s: 10999 rss: 47Mb L: 58/106 MS: 1 EraseBytes-
+#11022	REDUCE cov: 50 ft: 72 corp: 12/246b lim: 1048576 exec/s: 11022 rss: 47Mb L: 10/106 MS: 3 CMP-ChangeBit-CopyPart- DE: &#34;\377\377\377\377&#34;-
+#11060	REDUCE cov: 50 ft: 72 corp: 12/242b lim: 1048576 exec/s: 11060 rss: 47Mb L: 6/106 MS: 3 ChangeByte-ChangeASCIIInt-EraseBytes-
+#11115	REDUCE cov: 50 ft: 72 corp: 12/241b lim: 1048576 exec/s: 11115 rss: 47Mb L: 57/106 MS: 5 CopyPart-EraseBytes-InsertByte-ChangeASCIIInt-EraseBytes-
+#11448	REDUCE cov: 50 ft: 72 corp: 12/240b lim: 1048576 exec/s: 11448 rss: 47Mb L: 16/106 MS: 3 CopyPart-CrossOver-EraseBytes-
+#11454	REDUCE cov: 50 ft: 72 corp: 12/231b lim: 1048576 exec/s: 11454 rss: 47Mb L: 48/106 MS: 1 EraseBytes-
+#11860	REDUCE cov: 50 ft: 72 corp: 12/230b lim: 1048576 exec/s: 11860 rss: 47Mb L: 12/106 MS: 1 EraseBytes-
+#11909	REDUCE cov: 50 ft: 74 corp: 13/250b lim: 1048576 exec/s: 11909 rss: 47Mb L: 20/106 MS: 4 PersAutoDict-PersAutoDict-CMP-ChangeBit- DE: &#34;\377\377\377\377&#34;-&#34;\377\377\377\377&#34;-&#34;\377.\000\321&#34;-
+#11962	REDUCE cov: 50 ft: 74 corp: 13/243b lim: 1048576 exec/s: 11962 rss: 47Mb L: 41/106 MS: 3 ChangeBinInt-PersAutoDict-EraseBytes- DE: &#34;b5\312\016\000\000\000\000&#34;-
+#12028	REDUCE cov: 50 ft: 74 corp: 13/238b lim: 1048576 exec/s: 12028 rss: 47Mb L: 15/106 MS: 1 EraseBytes-
+#12744	REDUCE cov: 50 ft: 74 corp: 13/235b lim: 1048576 exec/s: 12744 rss: 47Mb L: 12/106 MS: 1 EraseBytes-
+#13106	REDUCE cov: 50 ft: 74 corp: 13/232b lim: 1048576 exec/s: 13106 rss: 47Mb L: 9/106 MS: 2 CopyPart-EraseBytes-
+#14238	REDUCE cov: 50 ft: 74 corp: 13/231b lim: 1048576 exec/s: 14238 rss: 47Mb L: 8/106 MS: 2 ShuffleBytes-EraseBytes-
+#18016	REDUCE cov: 50 ft: 74 corp: 13/230b lim: 1048576 exec/s: 18016 rss: 47Mb L: 40/106 MS: 3 ShuffleBytes-ShuffleBytes-EraseBytes-
+#32768	pulse  cov: 50 ft: 74 corp: 13/230b lim: 1048576 exec/s: 10922 rss: 47Mb
+#52336	REDUCE cov: 50 ft: 76 corp: 14/517b lim: 1048576 exec/s: 10467 rss: 47Mb L: 287/287 MS: 5 InsertByte-InsertRepeatedBytes-ChangeBinInt-InsertRepeatedBytes-CopyPart-
+#53029	REDUCE cov: 50 ft: 76 corp: 14/507b lim: 1048576 exec/s: 10605 rss: 47Mb L: 277/277 MS: 3 InsertRepeatedBytes-ChangeBinInt-EraseBytes-
+#53465	REDUCE cov: 50 ft: 76 corp: 14/472b lim: 1048576 exec/s: 10693 rss: 47Mb L: 242/242 MS: 1 EraseBytes-
+#56791	REDUCE cov: 50 ft: 76 corp: 14/467b lim: 1048576 exec/s: 11358 rss: 47Mb L: 237/237 MS: 1 EraseBytes-
+#65037	REDUCE cov: 50 ft: 76 corp: 14/462b lim: 1048576 exec/s: 10839 rss: 47Mb L: 232/232 MS: 1 EraseBytes-
+#65536	pulse  cov: 50 ft: 76 corp: 14/462b lim: 1048576 exec/s: 10922 rss: 47Mb
+#83525	REDUCE cov: 50 ft: 78 corp: 15/829b lim: 1048576 exec/s: 10440 rss: 47Mb L: 367/367 MS: 3 InsertRepeatedBytes-CopyPart-InsertRepeatedBytes-
+#104583	REDUCE cov: 50 ft: 78 corp: 15/827b lim: 1048576 exec/s: 10458 rss: 47Mb L: 365/365 MS: 3 PersAutoDict-ChangeByte-EraseBytes- DE: &#34;\377.\000\321&#34;-
+#130067	REDUCE cov: 50 ft: 78 corp: 15/826b lim: 1048576 exec/s: 10838 rss: 47Mb L: 364/364 MS: 4 ChangeBit-EraseBytes-EraseBytes-InsertRepeatedBytes-
+#131072	pulse  cov: 50 ft: 78 corp: 15/826b lim: 1048576 exec/s: 10922 rss: 47Mb
+#166251	REDUCE cov: 50 ft: 78 corp: 15/820b lim: 1048576 exec/s: 11083 rss: 47Mb L: 100/364 MS: 4 ChangeBit-ChangeBit-EraseBytes-ChangeBit-
+#262144	pulse  cov: 50 ft: 78 corp: 15/820b lim: 1048576 exec/s: 10922 rss: 47Mb
+#315156	DONE   cov: 50 ft: 78 corp: 15/820b lim: 1048576 exec/s: 10166 rss: 47Mb
+###### Recommended dictionary. ######
+&#34;b5\312\016\000\000\000\000&#34; # Uses: 8854
+&#34;\377\377\377\377&#34; # Uses: 9070
+&#34;\377.\000\321&#34; # Uses: 8976
+###### End of recommended dictionary. ######
+Done 315156 runs in 31 second(s)
+stat::number_of_executed_units: 315156
+stat::average_exec_per_sec:     10166
+stat::new_units_added:          105
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              47
+
+</pre>
+
+
+</body>

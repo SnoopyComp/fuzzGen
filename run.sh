@@ -9,7 +9,7 @@ export OPENAI_API_KEY=$OPENAI_API_KEY
 
 
 directory_name=$1
-library_name=libtiff
+library_name=libraw
 
 
 if [ -n "$3" ]; then
