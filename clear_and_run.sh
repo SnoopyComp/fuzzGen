@@ -9,7 +9,7 @@ export OPENAI_API_KEY=$OPENAI_API_KEY
 
 
 directory_name=$1
-library_name=http-parser
+library_name=libtiff
 
 sudo rm -rf /tmp/*
 rm -rf ~/.local/share/Trash/files/*
