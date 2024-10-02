@@ -33,14 +33,21 @@ from string import Template
 logging.basicConfig(level=logging.INFO)
 
 DEFAULT_CLUSTER = 'llm-experiment'
+LARGE_CLUSTER = 'llm-experiment-large'
 DEFAULT_LOCATION = 'us-central1-c'
+LARGE_LOCATION = 'us-central1'
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'k8s', 'pr-exp.yaml')
+LARGE_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'k8s',
+                                   'large-pr-exp.yaml')
 BENCHMARK_SET = 'comparison'
 LLM_NAME = 'vertex_ai_gemini-1-5'
+LLM_CHAT_NAME = 'vertex_ai_gemini-1-5-chat'
 EXP_DELAY = 0
 FUZZING_TIMEOUT = 300
 REQUEST_CPU = 6
+LARGE_REQUEST_CPU = 356
 REQUEST_MEM = 30
+LARGE_REQUEST_MEM = 1000
 NUM_SAMPLES = 2
 NUM_FIXES = 2
 VARY_TEMPERATURE = True
@@ -152,6 +159,22 @@ def _parse_args(cmd) -> argparse.Namespace:
       default=VARY_TEMPERATURE,
       help=('Use different temperatures for each sample, default: '
             f'{VARY_TEMPERATURE}'))
+  parser.add_argument('-ag',
+                      '--agent',
+                      action='store_true',
+                      default=False,
+                      help='Enables agent enhancement.')
+  parser.add_argument('-lg',
+                      '--large',
+                      action='store_true',
+                      default=False,
+                      help=('(Use sparingly) Do a large experiment with '
+                            'many more cores available.'))
+  parser.add_argument('-rd',
+                      '--redirect-outs',
+                      action='store_true',
+                      default=False,
+                      help='Redirects experiments stdout/stderr to file')
   args = parser.parse_args(cmd)
 
   assert os.path.isfile(
@@ -161,6 +184,17 @@ def _parse_args(cmd) -> argparse.Namespace:
   args.experiment_name = f'{args.pr_id}'
   if args.name_suffix:
     args.experiment_name = f'{args.experiment_name}-{args.name_suffix}'
+
+  # Use Chat model by default in agent-enhance experiments.
+  if args.agent and args.llm == LLM_NAME:
+    args.llm = LLM_CHAT_NAME
+
+  if args.large:
+    args.location = LARGE_LOCATION
+    args.cluster = LARGE_CLUSTER
+    args.request_cpus = LARGE_REQUEST_CPU
+    args.request_memory = LARGE_REQUEST_MEM
+    args.gke_template = LARGE_TEMPLATE_PATH
 
   return args
 
@@ -276,6 +310,8 @@ def _fill_template(args: argparse.Namespace) -> str:
   exp_env_vars['GKE_EXP_NUM_SAMPLES'] = f'{args.num_samples}'
   exp_env_vars['GKE_EXP_LLM_FIX_LIMIT'] = f'{args.llm_fix_limit}'
   exp_env_vars['GKE_EXP_VARY_TEMPERATURE'] = f'{args.vary_temperature}'.lower()
+  exp_env_vars['GKE_EXP_AGENT'] = f'{args.agent}'.lower()
+  exp_env_vars['GKE_REDIRECT_OUTS'] = 'true' if args.redirect_outs else ''
 
   with open(args.gke_template, 'r') as file:
     yaml_template = file.read()

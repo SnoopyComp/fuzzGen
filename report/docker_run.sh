@@ -38,6 +38,7 @@ USE_LOCAL_INTROSPECTOR=$7
 NUM_SAMPLES=$8
 LLM_FIX_LIMIT=$9
 VARY_TEMPERATURE=${10}
+AGENT=${11}
 
 # Uses python3 by default and /venv/bin/python3 for Docker containers.
 PYTHON="$( [[ -x "/venv/bin/python3" ]] && echo "/venv/bin/python3" || echo "python3" )"
@@ -123,6 +124,10 @@ else
     VARY_TEMPERATURE=()
 fi
 
+AGENT_ARG=""
+if [[ "$AGENT" = "true" ]]; then
+    AGENT_ARG="--agent"
+fi
 
 DATE=$(date '+%Y-%m-%d')
 LOCAL_RESULTS_DIR='results'
@@ -134,26 +139,47 @@ EXPERIMENT_NAME="${DATE:?}-${FREQUENCY_LABEL:?}-${BENCHMARK_SET:?}"
 # Report directory uses the same name as experiment.
 # See upload_report.sh on how this is used.
 GCS_REPORT_DIR="${SUB_DIR:?}/${EXPERIMENT_NAME:?}"
+# Trends report use a similarly named path.
+GCS_TREND_REPORT_PATH="${SUB_DIR:?}/${EXPERIMENT_NAME:?}.json"
 
 # Generate a report and upload it to GCS
 bash report/upload_report.sh "${LOCAL_RESULTS_DIR:?}" "${GCS_REPORT_DIR:?}" "${BENCHMARK_SET:?}" "${MODEL:?}" &
 pid_report=$!
 
 
-# Run the experiment
-$PYTHON run_all_experiments.py \
-  --benchmarks-directory "benchmark-sets/${BENCHMARK_SET:?}" \
-  --run-timeout "${RUN_TIMEOUT:?}" \
-  --cloud-experiment-name "${EXPERIMENT_NAME:?}" \
-  --cloud-experiment-bucket 'oss-fuzz-gcb-experiment-run-logs' \
-  --template-directory 'prompts/template_xml' \
-  --work-dir ${LOCAL_RESULTS_DIR:?} \
-  --num-samples "${NUM_SAMPLES:?}" \
-  --delay "${DELAY:?}" \
-  --context \
-  --introspector-endpoint ${INTROSPECTOR_ENDPOINT} \
-  --temperature-list "${VARY_TEMPERATURE[@]}" \
-  --model "$MODEL"
+# Run the experiment and redirect to file if indicated.
+if [[ "${REDIRECT_OUTS}" = '' ]]
+then
+  $PYTHON run_all_experiments.py \
+    --benchmarks-directory "benchmark-sets/${BENCHMARK_SET:?}" \
+    --run-timeout "${RUN_TIMEOUT:?}" \
+    --cloud-experiment-name "${EXPERIMENT_NAME:?}" \
+    --cloud-experiment-bucket 'oss-fuzz-gcb-experiment-run-logs' \
+    --template-directory 'prompts/template_xml' \
+    --work-dir ${LOCAL_RESULTS_DIR:?} \
+    --num-samples "${NUM_SAMPLES:?}" \
+    --delay "${DELAY:?}" \
+    --context \
+    --introspector-endpoint ${INTROSPECTOR_ENDPOINT} \
+    --temperature-list "${VARY_TEMPERATURE[@]}" \
+    --model "$MODEL" \
+    $AGENT_ARG
+else
+  $PYTHON run_all_experiments.py \
+    --benchmarks-directory "benchmark-sets/${BENCHMARK_SET:?}" \
+    --run-timeout "${RUN_TIMEOUT:?}" \
+    --cloud-experiment-name "${EXPERIMENT_NAME:?}" \
+    --cloud-experiment-bucket 'oss-fuzz-gcb-experiment-run-logs' \
+    --template-directory 'prompts/template_xml' \
+    --work-dir ${LOCAL_RESULTS_DIR:?} \
+    --num-samples "${NUM_SAMPLES:?}" \
+    --delay "${DELAY:?}" \
+    --context \
+    --introspector-endpoint ${INTROSPECTOR_ENDPOINT} \
+    --temperature-list "${VARY_TEMPERATURE[@]}" \
+    --model "$MODEL" \
+    $AGENT_ARG >> $LOCAL_RESULTS_DIR/logs-from-run.txt 2>&1
+fi
 
 export ret_val=$?
 
@@ -167,6 +193,22 @@ fi
 
 # Wait for the report process to finish uploading.
 wait $pid_report
+
+$PYTHON -m report.trends_report \
+  --results-dir ${LOCAL_RESULTS_DIR:?} \
+  --output-path "gs://oss-fuzz-gcb-experiment-run-logs/trend-reports/${GCS_TREND_REPORT_PATH:?}" \
+  --name ${EXPERIMENT_NAME:?} \
+  --date ${DATE:?} \
+  --url "https://llm-exp.oss-fuzz.com/Result-reports/${GCS_REPORT_DIR:?}" \
+  --benchmark-set ${BENCHMARK_SET:?} \
+  --run-timeout ${RUN_TIMEOUT:?} \
+  --num-samples ${NUM_SAMPLES:?} \
+  --llm-fix-limit ${LLM_FIX_LIMIT:?} \
+  --model ${MODEL:?} \
+  --tags ${FREQUENCY_LABEL:?} ${SUB_DIR:?} \
+  --commit-hash "$(git rev-parse HEAD)" \
+  --commit-date "$(git show --no-patch --format=%cs)" \
+  --git-branch "$(git branch --show)"
 
 # Exit with the return value of `./run_all_experiments`.
 exit $ret_val

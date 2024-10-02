@@ -19,11 +19,9 @@ import logging
 import os
 import re
 from abc import abstractmethod
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import jinja2
-import requests
-import yaml
 
 from data_prep import introspector, project_targets
 from experiment import oss_fuzz_checkout
@@ -37,22 +35,12 @@ DEFAULT_TEMPLATE_DIR: str = 'prompts/template_xml/'
 
 # TODO(Dongge): Refactor this tot avoid hard-coding.
 # Example files.
-EXAMPLE_PATH = os.path.join('prompts', 'example','libtiff_bad')
+EXAMPLE_PATH = os.path.join('prompts', 'example')
 # Example with FuzzeDataProvider.
 FDP_EXAMPLE_1_PROBLEM = os.path.join(EXAMPLE_PATH, 'gdImageString-problem.txt')
 FDP_EXAMPLE_1_SOLUTION = os.path.join(EXAMPLE_PATH, 'gdImageString-solution.cc')
 FDP_EXAMPLE_2_PROBLEM = os.path.join(EXAMPLE_PATH, 'mpg123_decode-problem.txt')
 FDP_EXAMPLE_2_SOLUTION = os.path.join(EXAMPLE_PATH, 'mpg123_decode-solution.cc')
-CPP01_PBL = os.path.join(EXAMPLE_PATH,'func1.txt')
-CPP01_SOL = os.path.join(EXAMPLE_PATH,'func1.cc')
-CPP02_PBL = os.path.join(EXAMPLE_PATH,'func2.txt')
-CPP02_SOL = os.path.join(EXAMPLE_PATH,'func2.cc')
-CPP03_PBL = os.path.join(EXAMPLE_PATH,'func3.txt')
-CPP03_SOL = os.path.join(EXAMPLE_PATH,'func3.cc')
-CPP04_PBL = os.path.join(EXAMPLE_PATH,'func4.txt')
-CPP04_SOL = os.path.join(EXAMPLE_PATH,'func4.cc')
-CPP05_PBL = os.path.join(EXAMPLE_PATH,'func5.txt')
-CPP05_SOL = os.path.join(EXAMPLE_PATH,'func5.cc')
 C_EXAMPLE_1_PROBLEM = os.path.join(EXAMPLE_PATH, 'fuzzerPolygonToCells.txt')
 C_EXAMPLE_1_SOLUTION = os.path.join(EXAMPLE_PATH, 'fuzzerPolygonToCells.c')
 C_EXAMPLE_2_PROBLEM = os.path.join(EXAMPLE_PATH, 'dns_message_parse.txt')
@@ -67,14 +55,8 @@ FDP_JVM_EXAMPLE_2_SOLUTION = os.path.join(EXAMPLE_PATH,
 
 EXAMPLES = {
     'c++': [
-#        [FDP_EXAMPLE_1_PROBLEM, FDP_EXAMPLE_1_SOLUTION],
-#        [FDP_EXAMPLE_2_PROBLEM, FDP_EXAMPLE_2_SOLUTION],
-        [CPP01_PBL,CPP01_SOL],
-        [CPP02_PBL,CPP02_SOL],
-        [CPP03_PBL,CPP03_SOL],
-        [CPP04_PBL,CPP04_SOL],
-        [CPP05_PBL,CPP05_SOL],
-
+        [FDP_EXAMPLE_1_PROBLEM, FDP_EXAMPLE_1_SOLUTION],
+        [FDP_EXAMPLE_2_PROBLEM, FDP_EXAMPLE_2_SOLUTION],
     ],
     'c': [
         [C_EXAMPLE_1_PROBLEM, C_EXAMPLE_1_SOLUTION],
@@ -95,9 +77,9 @@ C_PROMPT_HEADERS_TO_ALWAYS_INCLUDES = ['stdio.h', 'stdlib.h', 'stdint.h']
 class PromptBuilder:
   """Prompt builder."""
 
-  def __init__(self, model: models.LLM):
+  def __init__(self, model: models.LLM, initial=None):
     self._model = model
-    self._prompt = model.prompt_type()()
+    self._prompt = model.prompt_type()(initial)
 
   @abstractmethod
   def build(self,
@@ -129,8 +111,9 @@ class DefaultTemplateBuilder(PromptBuilder):
   def __init__(self,
                model: models.LLM,
                benchmark: Optional[Benchmark] = None,
-               template_dir: str = DEFAULT_TEMPLATE_DIR):
-    super().__init__(model)
+               template_dir: str = DEFAULT_TEMPLATE_DIR,
+               initial: Any = None):
+    super().__init__(model, initial)
     self._template_dir = template_dir
     self.benchmark = benchmark
 
@@ -564,7 +547,8 @@ class DefaultJvmTemplateBuilder(PromptBuilder):
     super().__init__(model)
     self._template_dir = template_dir
     self.benchmark = benchmark
-    self.project_url = self._find_project_url(self.benchmark.project)
+    self.project_url = oss_fuzz_checkout.get_project_repository(
+        self.benchmark.project)
 
     # Retrieve additional properties for the target method
     temp_properties = introspector.query_introspector_function_props(
@@ -595,23 +579,6 @@ class DefaultJvmTemplateBuilder(PromptBuilder):
         template_dir, 'jvm_object_arg_description.txt')
     self.import_template_file = self._find_template(template_dir,
                                                     'jvm_import_mapping.txt')
-
-  def _find_project_url(self, project_name: str) -> str:
-    """Discover project url from project's project.yaml in OSS-Fuzz"""
-    oss_fuzz_url = 'https://raw.githubusercontent.com/google/oss-fuzz/master'
-    project_url = f'{oss_fuzz_url}/projects/{project_name}/project.yaml'
-
-    try:
-      response = requests.get(project_url, timeout=20)
-      if response and response.status_code == 200:
-        project_yaml = yaml.load(response.content, Loader=yaml.SafeLoader)
-        if 'main_repo' in project_yaml:
-          return project_yaml['main_repo']
-    except:
-      pass
-
-    logger.info('Cannot retrieve project url of project %s', project_name)
-    return ''
 
   def _find_template(self, template_dir: str, template_name: str) -> str:
     """Finds template file based on |template_dir|."""
@@ -834,9 +801,9 @@ class DefaultJvmTemplateBuilder(PromptBuilder):
       constructor_sig = ctr.get('function_signature', '')
       if constructor_sig:
         constructors.append(f'<signature>{constructor_sig}</signature>')
-        self.exceptions.update(
-            introspector.query_introspector_function_props(
-                ctr.get('project', ''), constructor_sig)[0])
+        exceptions = introspector.query_introspector_function_props(
+            ctr.get('project', ''), constructor_sig).get('exceptions', [])
+        self.exceptions.extend(exceptions)
 
     if constructors:
       ctr_str = '\n'.join(constructors)
@@ -850,9 +817,9 @@ class DefaultJvmTemplateBuilder(PromptBuilder):
       function_sig = func.get('function_signature', '')
       if not function_sig:
         continue
-      self.exceptions.update(
-          introspector.query_introspector_function_props(
-              func.get('project', ''), function_sig)[0])
+      exceptions = introspector.query_introspector_function_props(
+          func.get('project', ''), function_sig).get('exceptions', [])
+      self.exceptions.extend(exceptions)
       if is_static:
         functions.append(f'<item><signature>{function_sig}</signature></item>')
       else:
@@ -1042,6 +1009,108 @@ class DefaultJvmTemplateBuilder(PromptBuilder):
     return generated_code
 
 
+class DefaultPythonTemplateBuilder(PromptBuilder):
+  """Default builder for Python projects."""
+
+  def __init__(self,
+               model: models.LLM,
+               benchmark: Benchmark,
+               template_dir: str = DEFAULT_TEMPLATE_DIR):
+    super().__init__(model)
+    self._template_dir = template_dir
+    self.benchmark = benchmark
+    self.project_url = oss_fuzz_checkout.get_project_repository(
+        self.benchmark.project)
+
+    # Load templates.
+    self.base_template_file = self._find_template(template_dir,
+                                                  'python_base.txt')
+    self.problem_template_file = self._find_template(template_dir,
+                                                     'python_problem.txt')
+
+  def _find_template(self, template_dir: str, template_name: str) -> str:
+    """Finds template file based on |template_dir|."""
+    preferred_template = os.path.join(template_dir, template_name)
+    # Use the preferred template if it exists.
+    if os.path.isfile(preferred_template):
+      return preferred_template
+    # Fall back to the default template.
+    default_template = os.path.join(DEFAULT_TEMPLATE_DIR, template_name)
+    return default_template
+
+  def _get_template(self, template_file: str) -> str:
+    """Reads the template for prompts."""
+    with open(template_file) as file:
+      return file.read()
+
+  def _format_target(self, signature: str) -> str:
+    """Format the target function for the prompts creation."""
+    target = self._get_template(self.problem_template_file)
+    signature_split = signature.rsplit('.', 1)
+
+    # Determine if the target is class function of instance function
+    if self.benchmark.params[0].get('name', '') == 'self':
+      arg_count = len(self.benchmark.params) - 1
+      desc = ('This is an instance function. You MUST create the needed '
+              f'class {signature_split[0]} before invoking the target '
+              f'function {signature_split[-1]}.')
+    else:
+      arg_count = len(self.benchmark.params)
+      desc = 'This is a class function. You MUST invoke it directly.'
+
+    target = target.replace('{METHOD_SIGNATURE}', signature)
+    target = target.replace('{PACKAGE}', signature_split[0])
+    target = target.replace('{ARG_COUNT}', str(arg_count))
+    target = target.replace('{CLASS_METHOD_OR_GENERAL_METHOD}', desc)
+
+    return target
+
+  def _format_problem(self, signature: str) -> str:
+    """Formats a problem based on the prompt template."""
+    base = self._get_template(self.base_template_file)
+    target_str = self._format_target(signature)
+
+    problem = base + target_str
+    problem = problem.replace("{PROJECT_NAME}", self.benchmark.project)
+    problem = problem.replace("{PROJECT_URL}", self.project_url)
+
+    return problem
+
+  def _prepare_prompt(self, prompt_str: str):
+    """Constructs a prompt using the parameters and saves it."""
+    self._prompt.add_priming(prompt_str)
+
+  def build(self,
+            example_pair: list[list[str]],
+            project_example_content: Optional[list[list[str]]] = None,
+            project_context_content: Optional[dict] = None) -> prompts.Prompt:
+    """Constructs a prompt using the templates in |self| and saves it.
+       Ignore target_file_type, project_example_content
+       and project_context_content parameters.
+    """
+    final_problem = self._format_problem(self.benchmark.function_signature)
+    self._prepare_prompt(final_problem)
+    return self._prompt
+
+  def build_fixer_prompt(self, benchmark: Benchmark, raw_code: str,
+                         error_desc: Optional[str],
+                         errors: list[str]) -> prompts.Prompt:
+    """Builds a fixer prompt."""
+    # Do nothing for python project now.
+    return self._prompt
+
+  def build_triager_prompt(self, benchmark: Benchmark, driver_code: str,
+                           crash_info: str, crash_func: dict) -> prompts.Prompt:
+    """Builds a triager prompt."""
+    # Do nothing for python project now.
+    return self._prompt
+
+  def post_process_generated_code(self, generated_code: str) -> str:
+    """Allows prompt builder to adjust the generated code."""
+    # Do nothing for python project now.
+    return generated_code
+
+
 class CSpecificBuilder(PromptBuilder):
   """Builder specifically targeted C (and excluding C++)."""
 
@@ -1176,6 +1245,31 @@ class TestToHarnessConverter(PromptBuilder):
     # Load templates.
     self.priming_template_file = self._find_template(
         template_dir, 'test_to_harness_priming.txt')
+    jvm_requirement_template_file = self._find_template(
+        template_dir, 'jvm_requirement_test_to_harness.txt')
+
+    # Constant prompt description and text
+    self.language_prompt = {
+        'c':
+            '''This is a C programming language so the harness
+should be written in C. This means the  harness should have the structure:
+<code>
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {}
+</code>
+Specifically, you should *not* include any `extern "C"` in the harness
+definition, and you should write the harness in pure C.
+      ''',
+        'c++':
+            '''This is a CPP programming language so the harness
+should be written in CPP. This means the  harness should have the structure:
+<code>
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {}
+</code>
+      ''',
+        'jvm':
+            self._get_template(jvm_requirement_template_file).replace(
+                '{HARNESS_NAME}', self.benchmark.target_name)
+    }
 
   def _find_template(self, template_dir: str, template_name: str) -> str:
     """Finds template file based on |template_dir|."""
@@ -1213,38 +1307,35 @@ class TestToHarnessConverter(PromptBuilder):
     # Format the priming
     target_repository = oss_fuzz_checkout.get_project_repository(
         self.benchmark.project)
-    test_source_code = introspector.query_introspector_source_code(
+    test_source_code = introspector.query_introspector_test_source(
         self.benchmark.project,
-        self.benchmark.test_file_path.replace('//', '/'), 0, 9999999)
-
-    included_header_files = self.extract_header_files(test_source_code)
+        self.benchmark.test_file_path.replace('//', '/'))
 
     prompt_text = prompt_text.replace("{TARGET_REPO}", target_repository)
     prompt_text = prompt_text.replace("{TEST_SOURCE_CODE}", test_source_code)
-    prompt_text = prompt_text.replace('{PROG_LANG}', self.benchmark.language)
 
-    if self.benchmark.language.lower() == 'c':
-      language_prompt = '''This is a C programming language so the harness
-should be written in C. This means the  harness should have the structure:
-<code>
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {}
-</code>
-Specifically, you should *not* include any `extern "C"` in the harness definition,
-and you should write the harness in pure C.
-      '''
-    else:
-      language_prompt = '''This is a CPP programming language so the harness
-should be written in CPP. This means the  harness should have the structure:
-<code>
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {}
-</code>
-      '''
+    language_text = self.language_prompt.get(self.benchmark.language.lower(),
+                                             '')
     prompt_text = prompt_text.replace('{PROGRAMMING_LANGUAGE_TEXT}',
-                                      language_prompt)
+                                      language_text)
 
-    language_text = f'''The following header files are used in the test. Please
- make sure to include the same ones: {included_header_files}'''
-    prompt_text = prompt_text.replace('{HEADER_FILE_LANG}', language_text)
+    if self.benchmark.language == 'jvm':
+      # Fuzz Introspector use JVM as it support other JVM languages in addition
+      # to Java. Currently, the logic in OSS-Fuzz-Gen is only working on Java.
+      prompt_text = prompt_text.replace('{PROG_LANG}', 'Java')
+      prompt_text = prompt_text.replace('{HEADER_FILE_LANG}', '')
+
+      # Provide list of public classes of this project
+      classes = introspector.query_introspector_public_classes(
+          self.benchmark.project)
+      prompt_text = prompt_text.replace('{PUBLIC_CLASSES}', ','.join(classes))
+    else:
+      included_header_files = self.extract_header_files(test_source_code)
+      self.language_text = ('The following header files are used in the '
+                            'test. Please make sure to include the same ones: '
+                            f'{included_header_files}')
+      prompt_text = prompt_text.replace('{PROG_LANG}', self.benchmark.language)
+      prompt_text = prompt_text.replace('{HEADER_FILE_LANG}', language_text)
 
     self._prompt.add_priming(prompt_text)
     return self._prompt
@@ -1261,7 +1352,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {}
     return self._prompt
 
   def post_process_generated_code(self, generated_code: str) -> str:
-    """Adds specific C headers we always want in the harnesses."""
+    """Adds specific C headers we always want in the harnesses.
+    Ignore this step for java projects"""
+    if self.benchmark.language.lower() == 'jvm':
+      return generated_code
+
     for header in C_PROMPT_HEADERS_TO_ALWAYS_INCLUDES:
       generated_code = f'#include <{header}>\n{generated_code}'
     generated_code += '\n'

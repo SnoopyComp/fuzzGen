@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Project source parser."""
-import argparse
+
 import logging
 import os
 import subprocess as sp
 import tempfile
+import time
 import uuid
-from multiprocessing import pool
 from typing import Dict
 
 from google.cloud import storage
@@ -30,45 +30,6 @@ logger = logging.getLogger(__name__)
 
 SEARCH_IGNORE_DIRS = ['aflplusplus', 'fuzztest', 'honggfuzz', 'libfuzzer']
 SEARCH_EXTS = ['.c', '.cc', '.cpp', '.cxx', '.c++']
-
-
-def _parse_arguments() -> argparse.Namespace:
-  """Parses command line args."""
-  parser = argparse.ArgumentParser(
-      description='Parse arguments to generate fuzz targets')
-
-  parser.add_argument('-p',
-                      '--project-name',
-                      type=str,
-                      required=True,
-                      help='Name of the project')
-
-  parser.add_argument('-r',
-                      '--result-dir',
-                      type=str,
-                      default='example_targets',
-                      help='Path to store the results')
-
-  parser.add_argument('-t',
-                      '--num-threads',
-                      type=int,
-                      default=4,
-                      help='Number of threads to use')
-
-  parser.add_argument('-f',
-                      '--interesting-filenames',
-                      nargs='*',
-                      type=str,
-                      default=[],
-                      help='Other interesting filenames to parse.')
-  parser.add_argument('-cb',
-                      '--cloud-experiment-bucket',
-                      type=str,
-                      default='',
-                      help='A gcloud bucket to store experiment files.')
-  args = parser.parse_args()
-  args.interesting_filenames = list(set(args.interesting_filenames))
-  return args
 
 
 def _read_harness(src_file: str, encoding_error_handling: str = 'replace'):
@@ -133,6 +94,8 @@ def _get_harness(src_file: str, out: str, language: str) -> tuple[str, str]:
   if language.lower(
   ) == 'jvm' and 'static void fuzzerTestOneInput' not in content:
     return '', ''
+  if language.lower() == 'python' and 'atheris.Fuzz()' not in content:
+    return '', ''
 
   short_path = src_file[len(out):]
   return short_path, content
@@ -160,20 +123,21 @@ def _build_project_local_docker(project: str):
 
 def _copy_project_src(project: str,
                       out: str,
-                      cloud_experiment_bucket: str = ''):
+                      cloud_experiment_bucket: str = '',
+                      language: str = 'c++'):
   """Copies /|src| from cloud if bucket is available or from local image."""
   if cloud_experiment_bucket:
     logger.info(
-        f'Retrieving human-written fuzz targets of {project} from Google '
-        'Cloud Build.')
+        'Retrieving human-written fuzz targets of %s from Google Cloud Build.',
+        project)
     bucket_dirname = _build_project_on_cloud(project, cloud_experiment_bucket)
     _copy_project_src_from_cloud(bucket_dirname, out, cloud_experiment_bucket)
   else:
     logger.info(
-        f'Retrieving human-written fuzz targets of {project} from local '
-        'Docker build.')
+        'Retrieving human-written fuzz targets of %s from local Docker build.',
+        project)
     _build_project_local_docker(project)
-    _copy_project_src_from_local(project, out)
+    _copy_project_src_from_local(project, out, language)
 
 
 def _build_project_on_cloud(project: str, cloud_experiment_bucket: str) -> str:
@@ -230,12 +194,12 @@ def _copy_project_src_from_cloud(bucket_dirname: str, out: str,
 
     # Download the file
     blob.download_to_filename(local_file_path)
-    logger.info(f"Downloaded {blob.name} to {local_file_path}")
+    logger.info('Downloaded %s to %s', blob.name, local_file_path)
     blob.delete()
-    logger.info(f"Deleted {blob.name} from the bucket.")
+    logger.info('Deleted %s from the bucket.', blob.name)
 
 
-def _copy_project_src_from_local(project: str, out: str):
+def _copy_project_src_from_local(project: str, out: str, language: str):
   """Runs the project's OSS-Fuzz image to copy /|src| to /|out|."""
   run_container = [
       'docker',
@@ -256,7 +220,7 @@ def _copy_project_src_from_local(project: str, out: str):
       '-e',
       'HELPER=True',
       '-e',
-      'FUZZING_LANGUAGE=c++',
+      f'FUZZING_LANGUAGE={language}',
       '--name',
       f'{project}-container',
       f'gcr.io/oss-fuzz/{project}',
@@ -265,7 +229,20 @@ def _copy_project_src_from_local(project: str, out: str):
                   capture_output=True,
                   stdin=sp.DEVNULL,
                   check=False)
+  if result.returncode and 'Conflict' in str(result.stderr):
+    # Sometimes the previous container need longer time to delete
+    # If the next docker run is invoked before the previous container
+    # completely removed, it will resulti n Conflict error.
+    # Sleep for 60 seconds and retry.
+    logger.warning('Failed to run OSS-Fuzz on %s, retry in 60 sec', project)
+    time.sleep(60)
+    result = sp.run(run_container,
+                    capture_output=True,
+                    stdin=sp.DEVNULL,
+                    check=False)
+
   if result.returncode:
+    # Still fail from conclict or other errors
     logger.error('Failed to run OSS-Fuzz image of %s:', project)
     logger.error('STDOUT: %s', result.stdout)
     logger.error('STDERR: %s', result.stderr)
@@ -323,6 +300,12 @@ def _identify_fuzz_targets(out: str, interesting_filenames: list[str],
         if path.endswith(tuple(interesting_filenames)):
           interesting_filepaths.append(path)
         if path.endswith('.java'):
+          potential_harnesses.append(path)
+      elif language == 'python':
+        # For Python
+        if path.endswith(tuple(interesting_filenames)):
+          interesting_filepaths.append(path)
+        if path.endswith('.py'):
           potential_harnesses.append(path)
       else:
         # For C/C++
@@ -398,7 +381,7 @@ def search_source(
     out = os.path.join(temp_dir, 'out')
     os.makedirs(out)
 
-    _copy_project_src(project, out, cloud_experiment_bucket)
+    _copy_project_src(project, out, cloud_experiment_bucket, language)
 
     potential_harnesses, interesting_filepaths = _identify_fuzz_targets(
         out, interesting_filenames, language)
@@ -408,27 +391,3 @@ def search_source(
     for short_path in fuzz_targets.keys():
       _copy_fuzz_targets(os.path.join(out, short_path[1:]), result_dir, project)
   return fuzz_targets, interesting_files
-
-
-def main():
-  args = _parse_arguments()
-  projects = []
-  if args.project_name == 'all':
-    projects = oss_fuzz_checkout.list_c_cpp_projects()
-  else:
-    projects = [args.project_name]
-
-  configs = [[
-      project,
-      args.interesting_filenames,
-      args.result_dir,
-      args.cloud_experiment_bucket,
-  ] for project in projects]
-  oss_fuzz_checkout.clone_oss_fuzz()
-  oss_fuzz_checkout.postprocess_oss_fuzz()
-  with pool.ThreadPool(args.num_threads) as p:
-    p.starmap(search_source, configs)
-
-
-if __name__ == '__main__':
-  main()

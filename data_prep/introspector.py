@@ -40,6 +40,8 @@ T = TypeVar('T', str, list, dict, int)  # Generic type.
 TIMEOUT = 45
 MAX_RETRY = 5
 
+USE_FI_TO_GET_TARGETS = bool(int(os.getenv('OSS_FI_TO_GET_TARGETS', '1')))
+
 # By default exclude static functions when identifying fuzz target candidates
 # to generate benchmarks.
 ORACLE_AVOID_STATIC_FUNCTIONS = bool(
@@ -66,12 +68,15 @@ INTROSPECTOR_FUNC_SIG = ''
 INTROSPECTOR_ADDR_TYPE = ''
 INTROSPECTOR_ALL_HEADER_FILES = ''
 INTROSPECTOR_ALL_FUNC_TYPES = ''
+INTROSPECTOR_TEST_SOURCE = ''
+INTROSPECTOR_HARNESS_SOURCE_AND_EXEC = ''
 
 INTROSPECTOR_HEADERS_FOR_FUNC = ''
 INTROSPECTOR_SAMPLE_XREFS = ''
 INTROSPECTOR_ALL_JVM_SOURCE_PATH = ''
 INTROSPECTOR_FUNCTION_WITH_MATCHING_RETURN_TYPE = ''
 INTROSPECTOR_JVM_PROPERTIES = ''
+INTROSPECTOR_JVM_PUBLIC_CLASSES = ''
 
 
 def get_oracle_dict() -> Dict[str, Any]:
@@ -100,7 +105,9 @@ def set_introspector_endpoints(endpoint):
       INTROSPECTOR_ALL_JVM_SOURCE_PATH, INTROSPECTOR_ORACLE_OPTIMAL, \
       INTROSPECTOR_HEADERS_FOR_FUNC, \
       INTROSPECTOR_FUNCTION_WITH_MATCHING_RETURN_TYPE, \
-      INTROSPECTOR_ORACLE_ALL_TESTS, INTROSPECTOR_JVM_PROPERTIES
+      INTROSPECTOR_ORACLE_ALL_TESTS, INTROSPECTOR_JVM_PROPERTIES, \
+      INTROSPECTOR_TEST_SOURCE, INTROSPECTOR_HARNESS_SOURCE_AND_EXEC, \
+      INTROSPECTOR_JVM_PUBLIC_CLASSES
 
   INTROSPECTOR_ENDPOINT = endpoint
 
@@ -116,6 +123,7 @@ def set_introspector_endpoints(endpoint):
   INTROSPECTOR_ORACLE_OPTIMAL = f'{INTROSPECTOR_ENDPOINT}/optimal-targets'
   INTROSPECTOR_FUNCTION_SOURCE = f'{INTROSPECTOR_ENDPOINT}/function-source-code'
   INTROSPECTOR_PROJECT_SOURCE = f'{INTROSPECTOR_ENDPOINT}/project-source-code'
+  INTROSPECTOR_TEST_SOURCE = f'{INTROSPECTOR_ENDPOINT}/project-test-code'
   INTROSPECTOR_XREF = f'{INTROSPECTOR_ENDPOINT}/all-cross-references'
   INTROSPECTOR_TYPE = f'{INTROSPECTOR_ENDPOINT}/type-info'
   INTROSPECTOR_FUNC_SIG = f'{INTROSPECTOR_ENDPOINT}/function-signature'
@@ -133,6 +141,10 @@ def set_introspector_endpoints(endpoint):
       f'{INTROSPECTOR_ENDPOINT}/function-with-matching-return-type')
   INTROSPECTOR_ORACLE_ALL_TESTS = f'{INTROSPECTOR_ENDPOINT}/project-tests'
   INTROSPECTOR_JVM_PROPERTIES = f'{INTROSPECTOR_ENDPOINT}/jvm-method-properties'
+  INTROSPECTOR_HARNESS_SOURCE_AND_EXEC = (
+      f'{INTROSPECTOR_ENDPOINT}/harness-source-and-executable')
+  INTROSPECTOR_JVM_PUBLIC_CLASSES = (
+      f'{INTROSPECTOR_ENDPOINT}/all-public-classes')
 
 
 def _construct_url(api: str, params: dict) -> str:
@@ -197,8 +209,10 @@ def _get_data(resp: Optional[requests.Response], key: str,
         resp.content.decode('utf-8').strip())
     return default_value
 
+  # To handle the case that some FI query could return empty list,
+  # empty dict or boolean value False
   content = data.get(key)
-  if content:
+  if content or key in data.keys():
     return content
 
   logger.error('Failed to get %s from FI:\n'
@@ -213,6 +227,15 @@ def query_introspector_for_tests(project: str) -> list[str]:
       'project': project,
   })
   return _get_data(resp, 'test-file-list', [])
+
+
+def query_introspector_for_harness_intrinsics(
+    project: str) -> list[dict[str, str]]:
+  """Gets the list of test files in the target project."""
+  resp = _query_introspector(INTROSPECTOR_HARNESS_SOURCE_AND_EXEC, {
+      'project': project,
+  })
+  return _get_data(resp, 'pairs', [])
 
 
 def query_introspector_oracle(project: str, oracle_api: str) -> list[dict]:
@@ -310,6 +333,13 @@ def query_introspector_function_props(project: str, func_sig: str) -> dict:
   }
 
 
+def query_introspector_public_classes(project: str) -> list[str]:
+  """Queries FuzzIntrospector API for all public classes of |project|."""
+  resp = _query_introspector(INTROSPECTOR_JVM_PUBLIC_CLASSES,
+                             {'project': project})
+  return _get_data(resp, 'classes', [])
+
+
 def query_introspector_source_code(project: str, filepath: str, begin_line: int,
                                    end_line: int) -> str:
   """Queries FuzzIntrospector API for source code of a
@@ -323,6 +353,15 @@ def query_introspector_source_code(project: str, filepath: str, begin_line: int,
           'end_line': end_line,
       })
 
+  return _get_data(resp, 'source_code', '')
+
+
+def query_introspector_test_source(project: str, filepath: str) -> str:
+  """Queries the source code of a test file from."""
+  resp = _query_introspector(INTROSPECTOR_TEST_SOURCE, {
+      'project': project,
+      'filepath': filepath
+  })
   return _get_data(resp, 'source_code', '')
 
 
@@ -365,7 +404,7 @@ def query_introspector_matching_function_constructor_type(
 
   resp = _query_introspector(INTROSPECTOR_FUNCTION_WITH_MATCHING_RETURN_TYPE, {
       'project': project,
-      'return_type': return_type
+      'return-type': return_type
   })
 
   if is_function:
@@ -587,7 +626,7 @@ def _select_top_functions_from_oracle(project: str, limit: int,
                                       target_oracle: str,
                                       target_oracles: list[str]) -> OrderedDict:
   """Selects the top |limit| functions from |target_oracle|."""
-  if target_oracle not in target_oracles:
+  if target_oracle not in target_oracles or target_oracle == 'test-migration':
     return OrderedDict()
 
   logger.info('Extracting functions using oracle %s.', target_oracle)
@@ -690,14 +729,41 @@ def _select_functions_from_oracles(project: str, limit: int,
   return [all_functions[func] for func in selected_singatures]
 
 
+def _get_harness_intrinsics(
+    project,
+    filenames,
+    language='') -> tuple[Optional[str], Optional[str], Dict[str, str]]:
+  """Returns a harness source path and executable from a given project."""
+  if USE_FI_TO_GET_TARGETS and language != 'jvm' and language != 'python':
+    harnesses = query_introspector_for_harness_intrinsics(project)
+    harness_dict = harnesses[0]
+    harness = harness_dict['source']
+    target_name = harness_dict['executable']
+    interesting_files = {}
+  else:
+    harnesses, interesting_files = project_src.search_source(
+        project, filenames, language)
+    harness = pick_one(harnesses)
+    if not harness:
+      logger.error('No fuzz target found in project %s.', project)
+      return None, None, {}
+    target_name = get_target_name(project, harness)
+
+  logger.info('Fuzz target file found for project %s: %s', project, harness)
+  logger.info('Fuzz target binary found for project %s: %s', project,
+              target_name)
+
+  return harness, target_name, interesting_files
+
+
 def populate_benchmarks_using_test_migration(
     project: str, language: str, limit: int) -> list[benchmarklib.Benchmark]:
   """Populates benchmarks using tests for test-to-harness conversion."""
-  harnesses, _ = project_src.search_source(project, [], language)
-  harness = pick_one(harnesses)
+
+  harness, target_name, _ = _get_harness_intrinsics(project, [], language)
   if not harness:
-    logger.error('No fuzz target found in project %s.', project)
     return []
+
   logger.info('Using harness path %s', harness)
   potential_benchmarks = []
   test_files = query_introspector_for_tests(project)
@@ -711,8 +777,7 @@ def populate_benchmarks_using_test_migration(
                                return_type='test',
                                params=[],
                                target_path=harness,
-                               preferred_target_name='',
-                               is_test_benchmark=True,
+                               preferred_target_name=target_name,
                                test_file_path=test_file))
   return potential_benchmarks[:limit]
 
@@ -722,14 +787,11 @@ def populate_benchmarks_using_introspector(project: str, language: str,
                                            target_oracles: List[str]):
   """Populates benchmark YAML files from the data from FuzzIntrospector."""
 
-  # If there is any oracle with test-migration then only do this oracle
-  # selection, because the benchmarks will have different .yaml structure.
-  # TODO(David): clean up benchmark code to make it more flexible for varying
-  # forms of target selectors, and potential mixing both types of target
-  # selectors.
+  potential_benchmarks = []
   for target_oracle in target_oracles:
     if 'test-migration' in target_oracle:
-      return populate_benchmarks_using_test_migration(project, language, limit)
+      potential_benchmarks.extend(
+          populate_benchmarks_using_test_migration(project, language, limit))
 
   if language == 'jvm':
     functions = _select_functions_from_jvm_oracles(project, limit,
@@ -738,13 +800,17 @@ def populate_benchmarks_using_introspector(project: str, language: str,
     functions = _select_functions_from_oracles(project, limit, target_oracles)
 
   if not functions:
-    logger.error('No functions found using the oracles: %s', target_oracles)
-    return []
+    return potential_benchmarks
 
   if language == 'jvm':
     filenames = [
         f'{function["function_filename"].split("$")[0].replace(".", "/")}.java'
         for function in functions
+    ]
+  elif language == 'python':
+    filenames = [
+        (f'{function["function_filename"].replace("...", "").replace(".", "/")}'
+         '.py') for function in functions
     ]
   else:
     filenames = [
@@ -752,19 +818,11 @@ def populate_benchmarks_using_introspector(project: str, language: str,
         for function in functions
     ]
 
-  harnesses, interesting = project_src.search_source(project, filenames,
-                                                     language)
-  harness = pick_one(harnesses)
+  harness, target_name, interesting = _get_harness_intrinsics(
+      project, filenames, language)
   if not harness:
-    logger.error('No fuzz target found in project %s.', project)
     return []
-  logger.info('Fuzz target file found for project %s: %s', project, harness)
 
-  target_name = get_target_name(project, harness)
-  logger.info('Fuzz target binary found for project %s: %s', project,
-              target_name)
-
-  potential_benchmarks = []
   for function in functions:
     if _get_arg_count(function) == 0:
       # Skipping functions / methods that does not take in any arguments.
@@ -772,6 +830,18 @@ def populate_benchmarks_using_introspector(project: str, language: str,
       continue
 
     filename = os.path.basename(function['function_filename'])
+
+    if language == 'python':
+      if filename.startswith('...'):
+        # Filename of python fuzzers always starts with ...
+        # Skipping them
+        continue
+      if _get_arg_count(function) == 1 and _get_arg_names(
+          function, project, language)[0] == 'self':
+        # If a python function has only 1 arugment and the argument name
+        # is 'self', it means that it is an instance function with no
+        # arguments. Thus skipping it.
+        continue
 
     if language == 'jvm':
       # Retrieve list of source file from introspector
@@ -786,7 +856,9 @@ def populate_benchmarks_using_introspector(project: str, language: str,
         if src_file not in src_path_list:
           logger.error('error: %s %s', filename, interesting.keys())
           continue
-    elif filename not in [os.path.basename(i) for i in interesting.keys()]:
+    elif language != 'python' and interesting and filename not in [
+        os.path.basename(i) for i in interesting.keys()
+    ]:
       # TODO: Bazel messes up paths to include "/proc/self/cwd/..."
       logger.error('error: %s %s', filename, interesting.keys())
       continue
@@ -977,7 +1049,7 @@ if __name__ == '__main__':
                                                       args.max_functions,
                                                       args.target_oracle)
   if benchmarks:
-    benchmarklib.Benchmark.to_yaml(benchmarks, args.out)
+    benchmarklib.Benchmark.to_yaml(benchmarks, outdir=args.out)
   else:
     logger.error('Nothing found for %s', args.project)
     sys.exit(1)

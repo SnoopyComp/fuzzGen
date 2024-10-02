@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import threading
 import time
 import urllib.parse
@@ -46,11 +47,23 @@ class JinjaEnv:
 
   @staticmethod
   def _cov_report_link(link: str):
+    """Get URL to coverage report"""
     if not link:
       return '#'
 
-    path = link.removeprefix('gs://oss-fuzz-gcb-experiment-run-logs/')
-    return f'https://llm-exp.oss-fuzz.com/{path}/report/linux/report.html'
+    if 'gcb-experiment' not in link:
+      # In local rusn we don't overwrite the path
+      link_path = link
+    else:
+      path = link.removeprefix('gs://oss-fuzz-gcb-experiment-run-logs/')
+      link_path = f'https://llm-exp.oss-fuzz.com/{path}/report/linux/'
+
+    # Check if this is a java benchmark, which will always have a period in
+    # the path, where C/C++ wont.
+    # TODO(David) refactor to have paths for links more controlled.
+    if '.' in link_path:
+      return link_path + 'index.html'
+    return link_path + 'report.html'
 
   def __init__(self, template_globals: Optional[Dict[str, Any]] = None):
     self._env = jinja2.Environment(
@@ -96,9 +109,37 @@ class GenerateReport:
       timings_dict = json.loads(f.read())
     return timings_dict
 
+  def _copy_and_set_coverage_report(self, benchmark, sample):
+    """Prepares coverage reports in local runs."""
+    coverage_path = os.path.join(self.results_dir, benchmark.id,
+                                 'code-coverage-reports')
+    if not os.path.isdir(coverage_path):
+      return
+
+    coverage_report = ''
+    for l in os.listdir(coverage_path):
+      if l.split('.')[0] == sample.id:
+        coverage_report = os.path.join(coverage_path, l)
+
+    # On cloud runs there are two folders in code coverage reports, (report,
+    # textcov). If we have three files/dirs (linux, style.cssand textcov), then
+    # it's a local run. In that case copy over the code coverage reports so
+    # they are visible in the HTML page.
+    if coverage_report and os.path.isdir(coverage_report) and len(
+        os.listdir(coverage_report)) > 2:
+      # Copy coverage to reports out
+      dst = os.path.join(self._output_dir, 'sample', benchmark.id, 'coverage')
+      os.makedirs(dst, exist_ok=True)
+      dst = os.path.join(dst, sample.id)
+
+      shutil.copytree(coverage_report, dst, dirs_exist_ok=True)
+      sample.result.coverage_report_path = \
+        f'/sample/{benchmark.id}/coverage/{sample.id}/linux/'
+
   def generate(self):
     """Generate and write every report file."""
     benchmarks = []
+    samples_with_bugs = []
     for benchmark_id in self._results.list_benchmark_ids():
       results, targets = self._results.get_results(benchmark_id)
       benchmark = self._results.match_benchmark(benchmark_id, results, targets)
@@ -106,10 +147,16 @@ class GenerateReport:
       samples = self._results.get_samples(results, targets)
       prompt = self._results.get_prompt(benchmark.id)
 
+      for sample in samples:
+        # If this is a local run then we need to set up coverage reports.
+        self._copy_and_set_coverage_report(benchmark, sample)
+
       self._write_benchmark_index(benchmark, samples, prompt)
       self._write_benchmark_crash(benchmark, samples)
 
       for sample in samples:
+        if sample.result.crashes:
+          samples_with_bugs.append({'benchmark': benchmark, 'sample': sample})
         sample_targets = self._results.get_targets(benchmark.id, sample.id)
         self._write_benchmark_sample(benchmark, sample, sample_targets)
 
@@ -119,7 +166,7 @@ class GenerateReport:
     time_results = self.read_timings()
 
     self._write_index_html(benchmarks, accumulated_results, time_results,
-                           projects)
+                           projects, samples_with_bugs)
     self._write_index_json(benchmarks)
 
   def _write(self, output_path: str, content: str):
@@ -139,13 +186,15 @@ class GenerateReport:
 
   def _write_index_html(self, benchmarks: List[Benchmark],
                         accumulated_results: AccumulatedResult,
-                        time_results: dict[str, Any], projects: list[Project]):
+                        time_results: dict[str, Any], projects: list[Project],
+                        samples_with_bugs: list[dict[str, Any]]):
     """Generate the report index.html and write to filesystem."""
     rendered = self._jinja.render('index.html',
                                   benchmarks=benchmarks,
                                   accumulated_results=accumulated_results,
                                   time_results=time_results,
-                                  projects=projects)
+                                  projects=projects,
+                                  samples_with_bugs=samples_with_bugs)
     self._write('index.html', rendered)
 
   def _write_index_json(self, benchmarks: List[Benchmark]):

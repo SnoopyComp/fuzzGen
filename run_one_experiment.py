@@ -22,6 +22,9 @@ import shutil
 from multiprocessing import pool
 from typing import List, Optional
 
+import logger
+import pipeline
+from agent.prototyper import Prototyper
 from data_prep import project_targets
 from data_prep.project_context.context_introspector import ContextRetriever
 from experiment import builder_runner as builder_runner_lib
@@ -30,8 +33,7 @@ from experiment import oss_fuzz_checkout, textcov
 from experiment.benchmark import Benchmark
 from experiment.workdir import WorkDirs
 from llm_toolkit import models, output_parser, prompt_builder, prompts
-
-logger = logging.getLogger(__name__)
+from results import BuildResult, ExperimentResult, Result, RunResult
 
 # WARN: Avoid high value for NUM_EVA for local experiments.
 # NUM_EVA controls the number of fuzz targets to evaluate in parallel by each
@@ -55,6 +57,7 @@ TEMPERATURE: float = 0.4
 RESULTS_DIR = './results'
 
 
+# TODO(dongge): Move this to results.py
 @dataclasses.dataclass
 class AggregatedResult:
   """Aggregated evaluation result."""
@@ -80,13 +83,51 @@ class AggregatedResult:
         f'max coverage diff sample: {self.max_coverage_diff_sample}\n'
         f'max coverage diff report: {self.max_coverage_diff_report or "None"}')
 
+  @classmethod
+  def from_experiment_result(
+      cls, trial_results: list[ExperimentResult]) -> 'AggregatedResult':
+    """Aggregates experiment history results of all samples."""
+    if not trial_results:
+      return AggregatedResult()
+
+    compilable_trials = []
+    crash_trials = []
+    max_coverage = 0
+    max_line_coverage_diff = 0
+    max_coverage_diff_report = ''
+    all_textcov = textcov.Textcov()
+    for trial_result_history in trial_results:
+      trial_final_result = trial_result_history.history_results[-1]
+      if isinstance(trial_final_result, BuildResult):
+        compilable_trials.append(trial_final_result.compiles)
+      if isinstance(trial_final_result, RunResult):
+        crash_trials.append(trial_final_result.crashes)
+        # TODO(dongge): Do not assume the last coverage is the highest.
+        max_coverage = max(max_coverage, trial_final_result.coverage)
+        if trial_final_result.line_coverage_diff > max_line_coverage_diff:
+          max_line_coverage_diff = trial_final_result.line_coverage_diff
+          max_coverage_diff_report = trial_final_result.coverage_report_path
+        if isinstance(trial_final_result.textcov_diff, textcov.Textcov):
+          all_textcov.merge(trial_final_result.textcov_diff)
+
+    build_success_rate = (sum(compilable_trials) /
+                          len(compilable_trials) if compilable_trials else 0)
+    crash_rate = sum(crash_trials) / len(crash_trials) if crash_trials else 0
+
+    return AggregatedResult(build_success_rate=build_success_rate,
+                            crash_rate=crash_rate,
+                            max_coverage=max_coverage,
+                            max_line_coverage_diff=max_line_coverage_diff,
+                            max_coverage_diff_report=max_coverage_diff_report,
+                            full_textcov_diff=all_textcov)
+
 
 def generate_targets(benchmark: Benchmark, model: models.LLM,
                      prompt: prompts.Prompt, work_dirs: WorkDirs,
                      builder: prompt_builder.PromptBuilder) -> list[str]:
   """Generates fuzz target with LLM."""
-  logger.info('Generating targets for %s %s using %s..', benchmark.project,
-              benchmark.function_signature, model.name)
+  logging.info('Generating targets for %s %s using %s..', benchmark.project,
+               benchmark.function_signature, model.name)
   model.query_llm(prompt, response_dir=work_dirs.raw_targets)
 
   _, target_ext = os.path.splitext(benchmark.target_path)
@@ -106,9 +147,9 @@ def generate_targets(benchmark: Benchmark, model: models.LLM,
   if generated_targets:
     targets_relpath = map(os.path.relpath, generated_targets)
     targets_relpath_str = '\n '.join(targets_relpath)
-    logger.info('Generated:\n %s', targets_relpath_str)
+    logging.info('Generated:\n %s', targets_relpath_str)
   else:
-    logger.info('Failed to generate targets: %s', generated_targets)
+    logging.info('Failed to generate targets: %s', generated_targets)
   return generated_targets
 
 
@@ -196,8 +237,8 @@ def check_targets(
     for i, target_stat in enumerate(
         p.starmap(evaluator.check_target, ai_target_pairs)):
       if target_stat is None:
-        logger.error('This should never happen: Error evaluating target: %s',
-                     generated_targets[i])
+        logging.error('This should never happen: Error evaluating target: %s',
+                      generated_targets[i])
         target_stat = exp_evaluator.Result()
 
       target_stats.append((i, target_stat))
@@ -205,7 +246,7 @@ def check_targets(
   if len(target_stats) > 0:
     return aggregate_results(target_stats, generated_targets)
 
-  logger.info('No targets to check.')
+  logging.info('No targets to check.')
   return None
 
 
@@ -230,7 +271,7 @@ def generate_targets_for_analysis(
 
     Returns a list of folders with the generated artifacts.
     """
-  logger.info('Generating targets')
+  logging.info('Generating targets')
   if benchmark.use_project_examples:
     project_examples = project_targets.generate_data(
         benchmark.project,
@@ -246,15 +287,19 @@ def generate_targets_for_analysis(
     context_info = {}
 
   # If this is a test benchmark then we will use a test prompt builder.
-  if benchmark.is_test_benchmark:
-    logger.info('Generating a target for test case: %s',
-                benchmark.test_file_path)
+  if benchmark.test_file_path:
+    logging.info('Generating a target for test case: %s',
+                 benchmark.test_file_path)
     builder = prompt_builder.TestToHarnessConverter(model, benchmark,
                                                     template_dir)
   elif benchmark.language == 'jvm':
     # For Java projects
     builder = prompt_builder.DefaultJvmTemplateBuilder(model, benchmark,
                                                        template_dir)
+  elif benchmark.language == 'python':
+    # For Python projects
+    builder = prompt_builder.DefaultPythonTemplateBuilder(
+        model, benchmark, template_dir)
   elif prompt_builder_to_use == 'CSpecific':
     builder = prompt_builder.CSpecificBuilder(model, benchmark, template_dir)
   else:
@@ -273,10 +318,47 @@ def generate_targets_for_analysis(
   return generated_targets
 
 
+def _fuzzing_pipeline(benchmark: Benchmark, model: models.LLM,
+                      args: argparse.Namespace, work_dirs: WorkDirs,
+                      trial: int) -> ExperimentResult:
+  """Runs the predefined 3-stage pipeline for one trial."""
+  trial_logger = logger.get_trial_logger(trial=trial, level=logging.DEBUG)
+  trial_logger.info('Trial Starts')
+  p = pipeline.Pipeline(
+      args=args, writing_stage_agents=[Prototyper(trial=trial, llm=model)])
+  results = p.execute(result_history=[
+      Result(benchmark=benchmark, trial=trial, work_dirs=work_dirs)
+  ])
+
+  return ExperimentResult(results)
+
+
+def _fuzzing_pipelines(benchmark: Benchmark, model: models.LLM,
+                       args: argparse.Namespace,
+                       work_dirs: WorkDirs) -> AggregatedResult:
+  """Runs all trial experiments in their pipelines."""
+  # Create a pool of worker processes
+  with pool.ThreadPool(processes=NUM_EVA) as p:
+    # Initialize thread-local storage in each worker before processing
+    task_args = [(benchmark, model, args, work_dirs, trial)
+                 for trial in range(1, NUM_EVA + 1)]
+    results = p.starmap(_fuzzing_pipeline, task_args)
+  return AggregatedResult.from_experiment_result(results)
+
+
 def run(benchmark: Benchmark, model: models.LLM, args: argparse.Namespace,
         work_dirs: WorkDirs) -> Optional[AggregatedResult]:
   """Generates code via LLM, and evaluates them."""
   model.cloud_setup()
+
+  # Save the benchmark in the working base
+  Benchmark.to_yaml([benchmark],
+                    outdir=work_dirs.base,
+                    out_basename='benchmark.yaml')
+
+  if args.agent:
+    # TODO(dongge): Make this default when it is ready.
+    return _fuzzing_pipelines(benchmark, model, args, work_dirs)
 
   generated_targets = generate_targets_for_analysis(
       model=model,
@@ -284,11 +366,11 @@ def run(benchmark: Benchmark, model: models.LLM, args: argparse.Namespace,
       work_dirs=work_dirs,
       template_dir=args.template_directory,
       use_context=args.context,
-      example_pair=prompt_builder.EXAMPLES[benchmark.language],
+      example_pair=prompt_builder.EXAMPLES.get(benchmark.language, []),
       prompt_builder_to_use=args.prompt_builder,
       cloud_experiment_bucket=args.cloud_experiment_bucket)
 
-  logger.info('Generated %d targets', len(generated_targets))
+  logging.info('Generated %d targets', len(generated_targets))
   if not generated_targets:
     return None
 

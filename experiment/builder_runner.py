@@ -143,6 +143,13 @@ class BuilderRunner:
 
   def _contains_target_jvm_method(self, target_path: str) -> bool:
     """Validates if the LLM-generated code contains the target jvm methods."""
+    signature = self.benchmark.function_signature
+
+    # For test to harness approach, the target signature does not
+    # exist, no need to do this pre-check
+    if not signature or not '].' in signature:
+      return True
+
     with open(target_path) as generated_code_file:
       code = generated_code_file.read()
 
@@ -154,7 +161,6 @@ class BuilderRunner:
     # if there are method calls with unknown variable names that match
     # the target method.
     base_arg_regex = r'[\s]*[a-zA-Z_$][a-zA-Z_$0-9(),.]*'
-    signature = self.benchmark.function_signature
     name = signature.split('].')[1].split('(')[0]
     arg_count = len(signature.split('(')[1].split(')')[0].split(','))
 
@@ -178,6 +184,16 @@ class BuilderRunner:
 
     return min_func_name in generated_code
 
+  def _contains_target_python_function(self, target_path: str) -> bool:
+    """Validates if the LLM-generated code contains the target function for
+    python projects."""
+    with open(target_path) as generated_code_file:
+      generated_code = generated_code_file.read()
+
+    min_func_name = self.benchmark.function_signature.rsplit('.', 1)[-1]
+
+    return min_func_name in generated_code
+
   def _pre_build_check(self, target_path: str,
                        build_result: BuildResult) -> bool:
     """Checks the generated target before building and running it."""
@@ -185,6 +201,8 @@ class BuilderRunner:
     # function.
     if self.benchmark.language == 'jvm':
       result = self._contains_target_jvm_method(target_path)
+    elif self.benchmark.language == 'python':
+      result = self._contains_target_python_function(target_path)
     else:
       result = self._contains_target_function(target_path)
 
@@ -397,11 +415,10 @@ class BuilderRunner:
             SemanticCheckResult(SemanticCheckResult.FP_NEAR_INIT_CRASH, symptom,
                                 crash_stacks, crash_func))
 
-      # FP case 3: 1st func of the 1st thread stack is in fuzz target.
+      # FP case 3: no func in 1st thread stack belongs to testing proj.
       if len(crash_stacks) > 0:
         first_stack = crash_stacks[0]
-        # Check the first stack frame of the first stack only.
-        for stack_frame in first_stack[:1]:
+        for stack_frame in first_stack:
           if self._stack_func_is_of_testing_project(stack_frame):
             if 'LLVMFuzzerTestOneInput' in stack_frame:
               return ParseResult(
@@ -427,10 +444,16 @@ class BuilderRunner:
     return ParseResult(cov_pcs, total_pcs, crashes, '',
                        SemanticCheckResult(SemanticCheckResult.NO_SEMANTIC_ERR))
 
-  def build_and_run(self, generated_project: str, target_path: str,
-                    iteration: int,
-                    language: str) -> tuple[BuildResult, Optional[RunResult]]:
+  def build_and_run(
+      self,
+      generated_project: str,
+      target_path: str,
+      iteration: int,
+      language: str,
+      cloud_build_tags: Optional[list[str]] = None
+  ) -> tuple[BuildResult, Optional[RunResult]]:
     """Builds and runs the fuzz target for fuzzing."""
+    del cloud_build_tags
     build_result = BuildResult()
 
     if not self._pre_build_check(target_path, build_result):
@@ -485,10 +508,10 @@ class BuilderRunner:
     # Parse libfuzzer logs to get fuzz target runtime details.
     with open(self.work_dirs.run_logs_target(benchmark_target_name, iteration),
               'rb') as f:
-      # In many case JVM projects won't have much cov
-      # difference in short running. Adding the flag for JVM
+      # In many case JVM/python projects won't have much cov
+      # difference in short running. Adding the flag for JVM/python
       # projects to temporary skip the checking of coverage change.
-      flag = not self.benchmark.language == 'jvm'
+      flag = not self.benchmark.language in ['jvm', 'python']
       run_result.cov_pcs, run_result.total_pcs, \
         run_result.crashes, run_result.crash_info, \
           run_result.semantic_check = \
@@ -609,6 +632,7 @@ class BuilderRunner:
     os.makedirs(workspacedir, exist_ok=True)
     if self.benchmark.cppify_headers:
       command.extend(['-e', 'JCC_CPPIFY_PROJECT_HEADERS=1'])
+    command.extend(['--entrypoint', '/bin/bash'])
     command.append(f'gcr.io/oss-fuzz/{generated_project}')
 
     pre_build_command = []
@@ -629,7 +653,7 @@ class BuilderRunner:
       post_build_command.extend(['&&', 'chmod', '777', '-R', '/out/*'])
 
     build_command = pre_build_command + ['compile'] + post_build_command
-    build_bash_command = ['/bin/bash', '-c', ' '.join(build_command)]
+    build_bash_command = ['-c', ' '.join(build_command)]
     command.extend(build_bash_command)
     with open(log_path, 'w+') as log_file:
       try:
@@ -648,10 +672,52 @@ class BuilderRunner:
                 sanitizer)
     return True
 
+  def _get_coverage_text_filename(self, project_name: str) -> str:
+    """Get the filename of the text coverage file. This is language
+    dependent."""
+    lang_to_textcov_basename = {
+        'jvm': 'jacoco.xml',
+        'python': 'all_cov.json',
+        'c++': f'{self.benchmark.target_name}.covreport',
+        'c': f'{self.benchmark.target_name}.covreport'
+    }
+
+    return os.path.join(get_build_artifact_dir(project_name,
+                                               'out'), 'textcov_reports',
+                        lang_to_textcov_basename[self.benchmark.language])
+
+  def _extract_local_textcoverage_data(self,
+                                       project_name: str) -> textcov.Textcov:
+    """Returns the textcoverage from a local coverage run."""
+    local_textcov_location = self._get_coverage_text_filename(project_name)
+    language_modes = {
+        'jvm': 'r',
+        'python': 'r',
+        'c': 'rb',
+        'c++': 'rb',
+    }
+    with open(local_textcov_location,
+              language_modes.get(self.benchmark.language, 'rb')) as f:
+      if self.benchmark.language == 'jvm':
+        new_textcov = textcov.Textcov.from_jvm_file(f)
+      elif self.benchmark.language == 'python':
+        new_textcov = textcov.Textcov.from_python_file(f)
+      else:
+        target_basename = os.path.basename(self.benchmark.target_path)
+        new_textcov = textcov.Textcov.from_file(
+            f,
+            ignore_function_patterns=[
+                # Don't include other functions defined in the target code.
+                re.compile(r'^' + re.escape(target_basename) + ':')
+            ])
+      return new_textcov
+
   def get_coverage_local(
       self, generated_project: str,
       benchmark_target_name: str) -> tuple[Optional[textcov.Textcov], Any]:
-    """Get coverage."""
+    """Builds the generate project with coverage sanitizer, runs OSS-Fuzz
+    coverage extraction and then returns the generated coverage reports, in
+    the form of the text coverage as well as the summary.json."""
     sample_id = os.path.splitext(benchmark_target_name)[0]
     log_path = os.path.join(self.work_dirs.build_logs,
                             f'{sample_id}-coverage.log')
@@ -690,33 +756,31 @@ class BuilderRunner:
                   generated_project, e.stdout, e.stderr)
       return None, None
 
-    if self.benchmark.language == 'jvm':
-      local_textcov_location = os.path.join(oss_fuzz_checkout.OSS_FUZZ_DIR,
-                                            'build', 'out', generated_project,
-                                            'textcov_reports', 'jacoco.xml')
-      with open(local_textcov_location) as f:
-        new_textcov = textcov.Textcov.from_jvm_file(f)
-    else:
-      local_textcov_location = os.path.join(
-          oss_fuzz_checkout.OSS_FUZZ_DIR, 'build', 'out', generated_project,
-          'textcov_reports', f'{self.benchmark.target_name}.covreport')
-      target_basename = os.path.basename(self.benchmark.target_path)
+    # Get the local text coverage, which includes the specific lines
+    # exercised in the target project.
+    local_textcov = self._extract_local_textcoverage_data(generated_project)
 
-      with open(local_textcov_location, 'rb') as f:
-        new_textcov = textcov.Textcov.from_file(
-            f,
-            ignore_function_patterns=[
-                # Don't include other functions defined in the target code.
-                re.compile(r'^' + re.escape(target_basename) + ':')
-            ])
+    # Copy the code coverage to a folder in the results directory so
+    # the coverage can be displayed in the result HTML page.
+    coverage_report = os.path.join(
+        get_build_artifact_dir(generated_project, 'out'), 'report')
+    destination_coverage = self.work_dirs.code_coverage_report(
+        benchmark_target_name)
+    shutil.copytree(coverage_report, destination_coverage, dirs_exist_ok=True)
 
-    coverage_summary = os.path.join(oss_fuzz_checkout.OSS_FUZZ_DIR, 'build',
-                                    'out', generated_project, 'report', 'linux',
-                                    'summary.json')
+    textcov_dir = os.path.join(get_build_artifact_dir(generated_project, 'out'),
+                               'textcov_reports')
+    dst_textcov = os.path.join(
+        self.work_dirs.code_coverage_report(benchmark_target_name), 'textcov')
+    shutil.copytree(textcov_dir, dst_textcov, dirs_exist_ok=True)
+
+    coverage_summary = os.path.join(
+        get_build_artifact_dir(generated_project, 'out'), 'report', 'linux',
+        'summary.json')
     with open(coverage_summary) as f:
       coverage_summary = json.load(f)
 
-    return new_textcov, coverage_summary
+    return local_textcov, coverage_summary
 
 
 class CloudBuilderRunner(BuilderRunner):
@@ -773,9 +837,14 @@ class CloudBuilderRunner(BuilderRunner):
 
     return False
 
-  def build_and_run(self, generated_project: str, target_path: str,
-                    iteration: int,
-                    language: str) -> tuple[BuildResult, Optional[RunResult]]:
+  def build_and_run(
+      self,
+      generated_project: str,
+      target_path: str,
+      iteration: int,
+      language: str,
+      cloud_build_tags: Optional[list[str]] = None
+  ) -> tuple[BuildResult, Optional[RunResult]]:
     """Builds and runs the fuzz target for fuzzing."""
     build_result = BuildResult()
 
@@ -784,7 +853,7 @@ class CloudBuilderRunner(BuilderRunner):
 
     try:
       return self.build_and_run_cloud(generated_project, target_path, iteration,
-                                      build_result, language)
+                                      build_result, language, cloud_build_tags)
     except Exception as err:
       logger.warning(
           'Error occurred when building and running fuzz target on cloud'
@@ -793,9 +862,14 @@ class CloudBuilderRunner(BuilderRunner):
       raise err
 
   def build_and_run_cloud(
-      self, generated_project: str, target_path: str, iteration: int,
+      self,
+      generated_project: str,
+      target_path: str,
+      iteration: int,
       build_result: BuildResult,
-      language: str) -> tuple[BuildResult, Optional[RunResult]]:
+      language: str,
+      cloud_build_tags: Optional[list[str]] = None
+  ) -> tuple[BuildResult, Optional[RunResult]]:
     """Builds and runs the fuzz target locally for fuzzing."""
     logger.info('Evaluating %s on cloud.', os.path.realpath(target_path))
 
@@ -820,22 +894,26 @@ class CloudBuilderRunner(BuilderRunner):
     reproducer_name = f'{uid}.reproducer'
     reproducer_path = f'gs://{self.experiment_bucket}/{reproducer_name}'
 
-    if not self._run_with_retry_control(
-        os.path.realpath(target_path),
-        [
-            f'./{oss_fuzz_checkout.VENV_DIR}/bin/python3',
-            'infra/build/functions/target_experiment.py',
-            f'--project={generated_project}',
-            f'--target={self.benchmark.target_name}',
-            f'--upload_build_log={build_log_path}',
-            f'--upload_err_log={err_log_path}',
-            f'--upload_output_log={run_log_path}',
-            f'--upload_corpus={corpus_path}',
-            f'--upload_coverage={coverage_path}',
-            f'--upload_reproducer={reproducer_path}',
-            f'--experiment_name={self.experiment_name}', '--'
-        ] + self._libfuzzer_args(),
-        cwd=oss_fuzz_checkout.OSS_FUZZ_DIR):
+    command = [
+        f'./{oss_fuzz_checkout.VENV_DIR}/bin/python3',
+        'infra/build/functions/target_experiment.py',
+        f'--project={generated_project}',
+        f'--target={self.benchmark.target_name}',
+        f'--upload_build_log={build_log_path}',
+        f'--upload_err_log={err_log_path}',
+        f'--upload_output_log={run_log_path}',
+        f'--upload_coverage={coverage_path}',
+        f'--upload_reproducer={reproducer_path}',
+        f'--upload_corpus={corpus_path}',
+        f'--experiment_name={self.experiment_name}'
+    ]
+    if cloud_build_tags:
+      command += ['--tags'] + cloud_build_tags
+    command += ['--'] + self._libfuzzer_args()
+
+    if not self._run_with_retry_control(os.path.realpath(target_path),
+                                        command,
+                                        cwd=oss_fuzz_checkout.OSS_FUZZ_DIR):
       return build_result, None
 
     logger.info('Evaluated %s on cloud.', os.path.realpath(target_path))
@@ -905,24 +983,43 @@ class CloudBuilderRunner(BuilderRunner):
                            coverage_report_path=coverage_path,
                            reproducer_path=reproducer_path,
                            log_path=run_log_path)
+
     blob = bucket.blob(f'{coverage_name}/report/linux/summary.json')
     if blob.exists():
-      with blob.open() as f:
+      # Download summary.json to our workdir.
+      cov_summary_folder = os.path.join(
+          self.work_dirs.code_coverage_report(generated_target_name),
+          'report/linux/')
+      os.makedirs(cov_summary_folder, exist_ok=True)
+      coverage_summary_file = os.path.join(cov_summary_folder, 'summary.json')
+      with open(coverage_summary_file, 'wb') as f:
+        blob.download_to_file(f)
+
+      # Load the coverage summary
+      with open(coverage_summary_file, 'r') as f:
         run_result.coverage_summary = json.load(f)
 
     target_basename = os.path.basename(self.benchmark.target_path)
 
     # Load coverage reports.
+    textcov_blob_path = self._get_cloud_textcov_path(coverage_name)
     if self.benchmark.language == 'jvm':
-      blob = bucket.blob(f'{coverage_name}/textcov_reports/jacoco.xml')
+      blob = bucket.blob(textcov_blob_path)
       if blob.exists():
         with blob.open() as f:
           run_result.coverage = textcov.Textcov.from_jvm_file(f)
+        self._copy_textcov_to_workdir(bucket, textcov_blob_path,
+                                      generated_target_name)
+    elif self.benchmark.language == 'python':
+      blob = bucket.blob(textcov_blob_path)
+      if blob.exists():
+        with blob.open() as f:
+          run_result.coverage = textcov.Textcov.from_python_file(f)
+        self._copy_textcov_to_workdir(bucket, textcov_blob_path,
+                                      generated_target_name)
     else:
       # C/C++
-      blob = bucket.blob(
-          f'{coverage_name}/textcov_reports/{self.benchmark.target_name}'
-          '.covreport')
+      blob = bucket.blob(textcov_blob_path)
       if blob.exists():
         with blob.open('rb') as f:
           run_result.coverage = textcov.Textcov.from_file(
@@ -931,6 +1028,8 @@ class CloudBuilderRunner(BuilderRunner):
                   # Don't include other functions defined in the target code.
                   re.compile(r'^' + re.escape(target_basename) + ':')
               ])
+        self._copy_textcov_to_workdir(bucket, textcov_blob_path,
+                                      generated_target_name)
 
     # Parse libfuzzer logs to get fuzz target runtime details.
     with open(self.work_dirs.run_logs_target(generated_target_name, iteration),
@@ -943,20 +1042,26 @@ class CloudBuilderRunner(BuilderRunner):
 
     return build_result, run_result
 
+  def _copy_textcov_to_workdir(self, bucket, textcov_blob_path: str,
+                               generated_target_name: str) -> None:
+    """Stores a given textcov blob into the workdir."""
+    blob = bucket.blob(textcov_blob_path)
+    textcov_dir = os.path.join(
+        self.work_dirs.code_coverage_report(generated_target_name), 'textcov')
+    os.makedirs(textcov_dir, exist_ok=True)
+    textcov_dst = os.path.join(textcov_dir, os.path.basename(textcov_blob_path))
+    with open(textcov_dst, 'wb') as f:
+      blob.download_to_file(f)
 
-# TODO(metzman): Finish this.
-FUZZ_TARGET_MAGIC = b'ochangdonggeliumetzmanfuzzer'
+  def _get_cloud_textcov_path(self, coverage_name: str) -> str:
+    """Extracts textcov blob path for this benchmark."""
+    if self.benchmark.language == 'jvm':
+      return f'{coverage_name}/textcov_reports/jacoco.xml'
+    if self.benchmark.language == 'python':
+      return f'{coverage_name}/textcov_reports/all_cov.json'
 
-
-def find_generated_fuzz_target(directory):
-  for root, _, files in os.walk(directory):
-    for filename in files:
-      filepath = os.path.join(root, filename)
-      with open(filepath, 'rb') as fp:
-        data = fp.read()
-      if FUZZ_TARGET_MAGIC in data:
-        return filepath
-  return None
+    return (f'{coverage_name}/textcov_reports/{self.benchmark.target_name}'
+            '.covreport')
 
 
 def get_build_artifact_dir(generated_project: str, build_artifact: str) -> str:

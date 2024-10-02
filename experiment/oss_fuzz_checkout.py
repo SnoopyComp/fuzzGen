@@ -189,7 +189,10 @@ def _get_project_cache_name(project: str) -> str:
 def _get_project_cache_image_name(project: str, sanitizer: str) -> str:
   """Gets name of cached Docker image for a project and a respective
   sanitizer."""
-  return f'gcr.io/oss-fuzz/{project}_{sanitizer}_cache'
+  sanitizer_mapping = {'address': 'asan', 'coverage': 'cov'}
+  san_lookup = sanitizer_mapping[sanitizer]
+  return ('us-central1-docker.pkg.dev/oss-fuzz/oss-fuzz-gen/'
+          f'{project}-ofg-cached-{san_lookup}')
 
 
 def _has_cache_build_script(project: str) -> bool:
@@ -353,3 +356,36 @@ def prepare_build(project_name, sanitizer, generated_project):
   else:
     logger.info('Using original dockerfile')
     shutil.copy(original_dockerfile, dockerfile_to_use)
+
+
+def _image_exists(image_name: str) -> bool:
+  """Checks if the given |image_name| exits."""
+  try:
+    all_images = sp.run(['docker', 'images', '--format', '{{.Repository}}'],
+                        stdout=sp.PIPE,
+                        text=True,
+                        check=True).stdout.splitlines()
+  except sp.CalledProcessError:
+    logger.info('Unable to list all docker images')
+    return False
+  return image_name in all_images
+
+
+def prepare_project_image(project: str) -> str:
+  """Prepares original image of the |project|'s fuzz target build container."""
+  image_name = f'gcr.io/oss-fuzz/{project}'
+  if _image_exists(image_name):
+    logger.info('Using existing project image for %s', project)
+    return image_name
+  logger.info('Unable to find existing project image for %s', project)
+  adjusted_env = os.environ | {
+      'FUZZING_LANGUAGE': get_project_language(project)
+  }
+  command = ['python3', 'infra/helper.py', 'build_image', '--pull', project]
+  try:
+    sp.run(command, cwd=OSS_FUZZ_DIR, env=adjusted_env, check=True)
+    logger.info('Successfully build project image for %s', project)
+    return image_name
+  except sp.CalledProcessError:
+    logger.info('Failed to build project image for %s', project)
+    return ''

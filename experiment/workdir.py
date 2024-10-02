@@ -39,6 +39,8 @@ class WorkDirs:
     os.makedirs(self.build_logs, exist_ok=True)
     os.makedirs(self.run_logs, exist_ok=True)
     os.makedirs(self._corpus_base, exist_ok=True)
+    os.makedirs(self.dills, exist_ok=True)
+    os.makedirs(self.fuzz_targets, exist_ok=True)
 
   @property
   def base(self):
@@ -53,6 +55,13 @@ class WorkDirs:
     os.makedirs(corpus_dir, exist_ok=True)
     return corpus_dir
 
+  def code_coverage_report(self, benchmark):
+    coverage_dir = os.path.join(self._base_dir, 'code-coverage-reports')
+    os.makedirs(coverage_dir, exist_ok=True)
+
+    benchmark_coverage = os.path.join(coverage_dir, benchmark)
+    return benchmark_coverage
+
   @property
   def status(self):
     return os.path.join(self._base_dir, 'status')
@@ -62,9 +71,15 @@ class WorkDirs:
     return os.path.join(self._base_dir, 'prompt.txt')
 
   @property
+  def fuzz_targets(self):
+    return os.path.join(self._base_dir, 'fuzz_targets')
+
+  # TODO(dongge): Deprecate this.
+  @property
   def raw_targets(self):
     return os.path.join(self._base_dir, 'raw_targets')
 
+  # TODO(dongge): Deprecate this.
   @property
   def fixed_targets(self):
     return os.path.join(self._base_dir, 'fixed_targets')
@@ -72,6 +87,10 @@ class WorkDirs:
   @property
   def build_logs(self):
     return os.path.join(self._base_dir, 'logs', 'build')
+
+  @property
+  def dills(self):
+    return os.path.join(self._base_dir, 'dills')
 
   @property
   def run_logs(self):
